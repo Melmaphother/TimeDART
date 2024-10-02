@@ -1,0 +1,38 @@
+for pred_len in 96 192 336 720; do
+    python -u run.py \
+        --task_name finetune \
+        --dataset ETTh2 \
+        --pretrain_dataset ETTh2 \
+        --train_batch_size 16 \
+        --val_batch_size 16 \
+        --test_batch_size 16 \
+        --input_len 336 \
+        --num_features 7 \
+        --position_encoding absolute \
+        --embedding patch \
+        --lr_adjust_method step \
+        --d_model 8 \
+        --num_heads 8 \
+        --feedforward_dim 32 \
+        --dropout 0.4 \
+        --num_layers_casual 2 \
+        --patch_len 2 \
+        --stride 2 \
+        --time_steps 1000 \
+        --scheduler cosine \
+        --num_layers_denoising 1 \
+        --head_dropout 0.1 \
+        --num_epochs_pretrain 50 \
+        --eval_per_epochs_pretrain 1 \
+        --pretrain_lr 0.0005 \
+        --pretrain_lr_decay 0.95 \
+        --finetune_mode fine_all \
+        --num_epochs_finetune 10 \
+        --eval_per_epochs_finetune 1 \
+        --finetune_lr 0.00005 \
+        --finetune_lr_decay 0.5 \
+        --pred_len $pred_len \
+        --finetune_head_dropout 0.1 \
+        --patience 3 \
+        --device cuda:7
+done
