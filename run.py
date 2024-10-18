@@ -2,9 +2,9 @@ import torch
 from argparse import Namespace
 from args import get_args
 from data_provider.data_factory import data_provider
-from models.TimeDAR import (
-    TimeDAR,
-    TimeDARForecasting,
+from models.TimeDART import (
+    TimeDART,
+    TimeDARTForecasting,
 )
 from exp.pretrain import Pretrain
 from exp.finetune import ForecastingFinetune
@@ -19,7 +19,7 @@ def pretrain(args: Namespace):
     val_loader = data_provider(args, "val")
     test_loader = data_provider(args, "test")
 
-    model = TimeDAR(args)
+    model = TimeDART(args)
     if args.verbose:
         print(f"Numbers of pretrain model parameters: {count_parameters(model)}")
     _pretrain = Pretrain(
@@ -39,7 +39,7 @@ def finetune(args: Namespace):
     test_loader = data_provider(args, "test")
 
     _pretrain_model_save_path = args.pretrain_save_dir / "pretrain_model.pth"
-    pretrain_model = TimeDAR(args)
+    pretrain_model = TimeDART(args)
     if _pretrain_model_save_path.exists():
         if args.verbose:
             print(f"Load pretrain model from {_pretrain_model_save_path}")
@@ -53,7 +53,7 @@ def finetune(args: Namespace):
             f"Pretrain Model not found in {_pretrain_model_save_path}"
         )
 
-    finetune_model = TimeDARForecasting(args=args, TimeDAR_encoder=pretrain_model)
+    finetune_model = TimeDARTForecasting(args=args, TimeDAR_encoder=pretrain_model)
     if args.verbose:
         print(
             f"Numbers of finetune model parameters: {count_parameters(finetune_model)}"
@@ -77,8 +77,8 @@ def fine_zero(args: Namespace):
     val_loader = data_provider(args, "val")
     test_loader = data_provider(args, "test")
 
-    random_model = TimeDAR(args)
-    fine_zero_model = TimeDARForecasting(args=args, TimeDAR_encoder=random_model)
+    random_model = TimeDART(args)
+    fine_zero_model = TimeDARTForecasting(args=args, TimeDAR_encoder=random_model)
 
     _fine_zero = ForecastingFinetune(
         args=args,
@@ -121,9 +121,9 @@ if __name__ == "__main__":
     if global_args.task_name == "pretrain":
         pretrain(global_args)
     elif global_args.task_name == "finetune":
-        # ft_mse, ft_mae = finetune(global_args)
+        ft_mse, ft_mae = finetune(global_args)
         fz_mse, fz_mae = fine_zero(global_args)
-        # record_score(global_args, ft_mse, ft_mae, fz_mse, fz_mae)
+        record_score(global_args, ft_mse, ft_mae, fz_mse, fz_mae)
         # fz_mse, fz_mae = fine_zero(global_args)
         # record_score(global_args, 0.0, 0.0, fz_mse, fz_mae)
     else:

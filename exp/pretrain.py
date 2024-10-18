@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from tqdm import tqdm
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
-from models.TimeDAR import TimeDAR
+from models.TimeDART import TimeDART
 from utils.tools import EarlyStopping, EpochTimer
 import itertools
 
@@ -25,7 +25,7 @@ class Pretrain:
     def __init__(
         self,
         args: Namespace,
-        model: TimeDAR,
+        model: TimeDART,
         train_loader: DataLoader | list[DataLoader],
         val_loader: DataLoader | list[DataLoader],
         test_loader: DataLoader | list[DataLoader],
@@ -149,7 +149,7 @@ class Pretrain:
         self.test_result_save_path.touch(exist_ok=True)
         self.test_result_save_path.write_text("")
 
-        model = TimeDAR(self.args).to(self.device)
+        model = TimeDART(self.args).to(self.device)
         if self.model_save_path.exists():
             if self.verbose:
                 print(f"Load pretrain model from {self.model_save_path}")

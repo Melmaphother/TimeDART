@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from tqdm import tqdm
 from torch.optim import Adam
 from torch.optim.lr_scheduler import OneCycleLR, ExponentialLR
-from models.TimeDAR import TimeDAR, TimeDARForecasting
+from models.TimeDART import TimeDART, TimeDARTForecasting
 from utils.tools import EarlyStopping, EpochTimer, adjust_learning_rate
 import itertools
 
@@ -25,7 +25,7 @@ class ForecastingFinetune:
     def __init__(
         self,
         args: Namespace,
-        model: TimeDARForecasting,
+        model: TimeDARTForecasting,
         train_loader: DataLoader | list[DataLoader],
         val_loader: DataLoader | list[DataLoader],
         test_loader: DataLoader | list[DataLoader],
@@ -205,8 +205,8 @@ class ForecastingFinetune:
         self.test_result_save_path.touch()
         self.test_result_save_path.write_text("")
 
-        model = TimeDARForecasting(
-            args=self.args, TimeDAR_encoder=TimeDAR(args=self.args)
+        model = TimeDARTForecasting(
+            args=self.args, TimeDAR_encoder=TimeDART(args=self.args)
         ).to(self.device)
         if self.model_save_path.exists():
             if self.verbose:

@@ -138,12 +138,12 @@ def organize_file_structure(_args: argparse.Namespace):
 
 
 def get_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="TimeDAR Args")
+    parser = argparse.ArgumentParser(description="TimeDART Args")
 
     parser.add_argument(
         "--model_name",
         type=str,
-        default="DearCats",
+        default="TimeDART",
         help="model name",
     )
 
