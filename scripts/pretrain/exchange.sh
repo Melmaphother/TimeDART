@@ -1,27 +1,28 @@
 python -u run.py \
     --task_name pretrain \
-    --dataset exchange \
-    --train_batch_size 32 \
-    --val_batch_size 32 \
-    --test_batch_size 32 \
+    --root_path ./datasets/exchange/ \
+    --data_path exchange.csv \
+    --model_id Exchange \
+    --model TimeDART \
+    --data Exchange \
+    --features M \
     --input_len 336 \
-    --num_features 8 \
-    --position_encoding absolute \
-    --embedding patch \
-    --d_model 64 \
-    --num_heads 16 \
-    --feedforward_dim 128 \
-    --dropout 0.2 \
-    --num_layers_casual 2 \
+    --e_layers 2 \
+    --d_layers 1 \
+    --enc_in 8 \
+    --dec_in 8 \
+    --c_out 8 \
+    --n_heads 8 \
+    --d_model 32 \
+    --d_ff 64 \
     --patch_len 2 \
     --stride 2 \
+    --head_dropout 0.1 \
+    --dropout 0.2 \
     --time_steps 1000 \
     --scheduler cosine \
-    --head_dropout 0.1 \
-    --num_layers_denoising 1 \
-    --num_epochs_pretrain 50 \
-    --eval_per_epochs_pretrain 1 \
-    --pretrain_lr 0.001 \
-    --pretrain_lr_decay 0.95 \
-    --patience 10 \
-    --device cuda:6
+    --lr_decay 0.95 \
+    --learning_rate 0.001 \
+    --batch_size 16 \
+    --train_epochs 50 \
+    --gpu 5

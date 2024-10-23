@@ -1,72 +1,101 @@
-from argparse import Namespace
-from .dataset import ETThDataset, ETTmDataset, CustomDataset
+from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_M4, PSMSegLoader, \
+    MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader
+from data_provider.uea import collate_fn
 from torch.utils.data import DataLoader
 
-
 data_dict = {
-    'ETTh1': ETThDataset,
-    'ETTh2': ETThDataset,
-    'ETTm1': ETTmDataset,
-    'ETTm2': ETTmDataset,
-    'electricity': CustomDataset,
-    'exchange': CustomDataset,
-    'traffic': CustomDataset,
-    'weather': CustomDataset,
+    'ETTh1': Dataset_ETT_hour,
+    'ETTh2': Dataset_ETT_hour,
+    'ETTm1': Dataset_ETT_minute,
+    'ETTm2': Dataset_ETT_minute,
+    'Electricity': Dataset_Custom,
+    'Traffic': Dataset_Custom,
+    'Exchange': Dataset_Custom,
+    'Weather': Dataset_Custom,
+    'ECL': Dataset_Custom,
+    'ILI': Dataset_Custom,
+    'm4': Dataset_M4,
+    'PSM': PSMSegLoader,
+    'MSL': MSLSegLoader,
+    'SMAP': SMAPSegLoader,
+    'SMD': SMDSegLoader,
+    'SWAT': SWATSegLoader,
+    'UEA': UEAloader,
 }
 
-def data_provider(args: Namespace, flag: str):
+
+def data_provider(args, flag):
+    Data = data_dict[args.data]
+
+    timeenc = 0 if args.embed != 'timeF' else 1
+
     if flag == 'test':
-        shuffle = False
+        shuffle_flag = False
         drop_last = True
         if args.task_name == 'anomaly_detection' or args.task_name == 'classification':
-            batch_size = args.test_batch_size
+            batch_size = args.batch_size
         else:
-            batch_size = 1
-    elif flag == 'val':
-        shuffle = False
-        drop_last = True
-        batch_size = args.val_batch_size
-    elif flag == 'train':
-        shuffle = True
-        drop_last = True
-        batch_size = args.train_batch_size
-    
-
-    datasets = args.dataset.split('-')  # 'ETTh1-ETTh2'
-    if len(datasets) == 1:
-        _Dataset = data_dict[datasets[0].strip()](args=args, flag=flag)
-        if args.downstream_task == 'forecasting':
-            data_loader = DataLoader(
-                dataset=_Dataset,
-                batch_size=batch_size,
-                shuffle=shuffle,
-                drop_last=drop_last,
-            )
-            print(f'[{flag} dataloader] dataset: {datasets[0]}, length: {len(_Dataset)}, batch_size: {batch_size}, shuffle: {shuffle}, drop_last: {drop_last}')
-        elif args.downstream_task == 'classification':
-            pass
-        else:
-            raise ValueError(f'Invalid task: {args.downstream_task=}', 'task should be one of [forecasting, classification]')
+            batch_size = 1  # bsz=1 for evaluation
+        freq = args.freq
     else:
-        dataset_list = []
-        for ds in datasets:
-            dataset_class = data_dict[ds.strip()]
-            dataset_instance = dataset_class(args=args, flag=flag, dataset=ds.strip())
-            dataset_list.append(dataset_instance)
-        if args.downstream_task == 'forecasting':
-            dataloader_list = []
-            for ds in dataset_list:
-                dataloader = DataLoader(
-                    dataset=ds,
-                    batch_size=batch_size,
-                    shuffle=shuffle,
-                    drop_last=drop_last,
-                )
-                dataloader_list.append(dataloader)
-            data_loader = dataloader_list
-        elif args.downstream_task == 'classification':
-            pass
-        else:
-            raise ValueError(f'Invalid task: {args.downstream_task=}', 'task should be one of [forecasting, classification]')
+        shuffle_flag = True
+        drop_last = True
+        batch_size = args.batch_size  # bsz for train and valid
+        freq = args.freq
 
-    return data_loader
+    if args.task_name == 'anomaly_detection':
+        drop_last = False
+        data_set = Data(
+            root_path=args.root_path,
+            win_size=args.input_len,
+            flag=flag,
+        )
+        print(flag, len(data_set))
+        data_loader = DataLoader(
+            data_set,
+            batch_size=batch_size,
+            shuffle=shuffle_flag,
+            num_workers=args.num_workers,
+            drop_last=drop_last)
+        return data_set, data_loader
+    elif args.task_name == 'classification':
+        drop_last = False
+        data_set = Data(
+            root_path=args.root_path,
+            flag=flag,
+        )
+        print(flag, len(data_set))
+        data_loader = DataLoader(
+            data_set,
+            batch_size=batch_size,
+            shuffle=shuffle_flag,
+            num_workers=args.num_workers,
+            drop_last=drop_last,
+            collate_fn=lambda x: collate_fn(x, max_len=args.seq_len)
+        )
+        return data_set, data_loader
+    else:
+        if args.data == 'm4':
+            drop_last = False
+
+        data_set = Data(
+            root_path=args.root_path,
+            data_path=args.data_path,
+            flag=flag,
+            size=[args.input_len, args.label_len, args.pred_len],
+            features=args.features,
+            target=args.target,
+            timeenc=timeenc,
+            freq=freq,
+            seasonal_patterns=args.seasonal_patterns
+        )
+
+        data_loader = DataLoader(
+            data_set,
+            batch_size=batch_size,
+            shuffle=shuffle_flag,
+            num_workers=args.num_workers,
+            drop_last=drop_last)
+
+        print(flag, len(data_set), len(data_loader))
+        return data_set, data_loader

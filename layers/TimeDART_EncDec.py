@@ -75,8 +75,6 @@ class TransformerEncoderBlock(nn.Module):
         x = self.norm1(x + self.dropout(attn_output))
 
         # Feed-forward network
-        # y = self.dropout(self.activation(self.conv1(y.permute(0, 2, 1))))
-        # ff_output = self.conv2(y).permute(0, 2, 1)
         ff_output = self.ff(x)
         output = self.norm2(x + self.dropout(ff_output))
 
@@ -181,7 +179,7 @@ class TransformerDecoderBlock(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.ff = nn.Sequential(
             nn.Linear(d_model, feedforward_dim),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(feedforward_dim, d_model),
         )
@@ -244,27 +242,3 @@ class DenoisingPatchDecoder(nn.Module):
         return x
 
 
-class ForecastingHead(nn.Module):
-    def __init__(
-        self,
-        seq_len: int,
-        d_model: int,
-        pred_len: int,
-        dropout: float,
-    ):
-        super(ForecastingHead, self).__init__()
-        self.pred_len = pred_len
-        self.flatten = nn.Flatten(start_dim=-2)
-        self.forecast_head = nn.Linear(seq_len * d_model, pred_len)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        :param x: [batch_size, num_features, seq_len, d_model]
-        :return: [batch_size, pred_len, num_features]
-        """
-        x = self.flatten(x)  # (batch_size, num_features, seq_len * d_model)
-        x = self.forecast_head(x)  # (batch_size, num_features, pred_len)
-        x = self.dropout(x)  # (batch_size, num_features, pred_len)
-        x = x.permute(0, 2, 1)  # (batch_size, pred_len, num_features)
-        return x

@@ -1,27 +1,28 @@
 python -u run.py \
     --task_name pretrain \
-    --dataset ETTh2 \
-    --train_batch_size 16 \
-    --val_batch_size 16 \
-    --test_batch_size 16 \
+    --root_path ./datasets/ETT-small/ \
+    --data_path ETTh2.csv \
+    --model_id ETTh2 \
+    --model TimeDART \
+    --data ETTh2 \
+    --features M \
     --input_len 336 \
-    --num_features 7 \
-    --position_encoding absolute \
-    --embedding patch \
+    --e_layers 2 \
+    --d_layers 1 \
+    --enc_in 7 \
+    --dec_in 7 \
+    --c_out 7 \
+    --n_heads 8 \
     --d_model 8 \
-    --num_heads 8 \
-    --feedforward_dim 32 \
-    --dropout 0.2 \
-    --num_layers_casual 2 \
+    --d_ff 32 \
     --patch_len 2 \
     --stride 2 \
+    --head_dropout 0.1 \
+    --dropout 0.2 \
     --time_steps 1000 \
     --scheduler cosine \
-    --num_layers_denoising 1 \
-    --head_dropout 0.1 \
-    --num_epochs_pretrain 50 \
-    --eval_per_epochs_pretrain 1 \
-    --pretrain_lr 0.0005 \
-    --pretrain_lr_decay 0.95 \
-    --patience 10 \
-    --device cuda:7
+    --lr_decay 0.95 \
+    --learning_rate 0.0005 \
+    --batch_size 16 \
+    --train_epochs 50 \
+    --gpu 7

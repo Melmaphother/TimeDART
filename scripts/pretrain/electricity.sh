@@ -1,28 +1,28 @@
 python -u run.py \
     --task_name pretrain \
-    --dataset electricity \
-    --train_batch_size 16 \
-    --val_batch_size 16 \
-    --test_batch_size 16 \
+    --root_path ./datasets/electricity/ \
+    --data_path electricity.csv \
+    --model_id Electricity \
+    --model TimeDART \
+    --data Electricity \
+    --features M \
     --input_len 336 \
-    --num_features 321 \
-    --position_encoding absolute \
-    --embedding patch \
+    --e_layers 2 \
+    --d_layers 1 \
+    --enc_in 321 \
+    --dec_in 321 \
+    --c_out 321 \
+    --n_heads 16 \
     --d_model 128 \
-    --num_heads 16 \
-    --feedforward_dim 256 \
-    --dropout 0.2 \
-    --num_layers_casual 2 \
+    --d_ff 256 \
     --patch_len 8 \
     --stride 8 \
+    --head_dropout 0.1 \
+    --dropout 0.2 \
     --time_steps 1000 \
     --scheduler cosine \
-    --head_dropout 0.1 \
-    --num_layers_denoising 1 \
-    --num_epochs_pretrain 50 \
-    --eval_per_epochs_pretrain 1 \
-    --pretrain_lr 0.0001 \
-    --pretrain_lr_decay 0.95 \
-    --patience 10 \
-    --device cuda:0 \
-    --use_tqdm
+    --lr_decay 0.95 \
+    --learning_rate 0.0001 \
+    --batch_size 16 \
+    --train_epochs 50 \
+    --gpu 6

@@ -1,37 +1,34 @@
 for pred_len in 96 192 336 720; do
     python -u run.py \
         --task_name finetune \
-        --dataset ETTm2 \
-        --pretrain_dataset ETTm2 \
-        --train_batch_size 64 \
-        --val_batch_size 64 \
-        --test_batch_size 64 \
+        --is_training 1 \
+        --root_path ./datasets/ETT-small/ \
+        --data_path ETTm2.csv \
+        --model_id ETTm2 \
+        --model TimeDART \
+        --data ETTm2 \
+        --features M \
         --input_len 336 \
-        --num_features 7 \
-        --position_encoding absolute \
-        --lr_adjust_method step \
+        --label_len 48 \
+        --pred_len $pred_len \
+        --e_layers 2 \
+        --enc_in 7 \
+        --dec_in 7 \
+        --c_out 7 \
+        --n_heads 8 \
         --d_model 8 \
-        --num_heads 8 \
-        --feedforward_dim 16 \
-        --dropout 0.2 \
-        --num_layers_casual 2 \
+        --d_ff 16 \
         --patch_len 2 \
         --stride 2 \
+        --dropout 0.4 \
+        --head_dropout 0.1 \
+        --batch_size 64 \
+        --gpu 5 \
+        --lr_decay 0.5 \
+        --lradj step \
         --time_steps 1000 \
         --scheduler cosine \
-        --head_dropout 0.1 \
-        --num_layers_denoising 1 \
-        --num_epochs_pretrain 50 \
-        --eval_per_epochs_pretrain 1 \
-        --pretrain_lr 0.001 \
-        --pretrain_lr_decay 0.8 \
-        --finetune_mode fine_all \
-        --num_epochs_finetune 10 \
-        --eval_per_epochs_finetune 1 \
-        --finetune_lr 0.0001 \
-        --finetune_lr_decay 0.5 \
-        --pred_len $pred_len \
-        --finetune_head_dropout 0.1 \
         --patience 3 \
-        --device cuda:7
+        --learning_rate 0.0001 \
+        --pct_start 0.2
 done

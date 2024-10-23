@@ -1,39 +1,34 @@
 for pred_len in 96 192 336 720; do
     python -u run.py \
         --task_name finetune \
-        --dataset weather \
-        --pretrain_dataset weather \
-        --train_batch_size 64 \
-        --val_batch_size 64 \
-        --test_batch_size 64 \
+        --is_training 1 \
+        --root_path ./datasets/weather/ \
+        --data_path weather.csv \
+        --model_id Weather \
+        --model TimeDART \
+        --data Weather \
+        --features M \
         --input_len 336 \
-        --num_features 21 \
-        --position_encoding absolute \
-        --lr_adjust_method step \
+        --label_len 48 \
+        --pred_len $pred_len \
+        --e_layers 2 \
+        --enc_in 21 \
+        --dec_in 21 \
+        --c_out 21 \
+        --n_heads 8 \
         --d_model 64 \
-        --num_heads 8 \
-        --feedforward_dim 128 \
-        --dropout 0.2 \
-        --num_layers_casual 2 \
+        --d_ff 64 \
         --patch_len 2 \
         --stride 2 \
+        --dropout 0.2 \
+        --head_dropout 0.1 \
+        --batch_size 16 \
+        --gpu 5 \
+        --lr_decay 0.5 \
+        --lradj step \
         --time_steps 1000 \
         --scheduler cosine \
-        --head_dropout 0.1 \
-        --num_layers_denoising 1 \
-        --num_epochs_pretrain 50 \
-        --eval_per_epochs_pretrain 1 \
-        --pretrain_lr 0.001 \
-        --pretrain_lr_decay 0.95 \
-        --finetune_mode fine_all \
-        --num_epochs_finetune 10 \
-        --eval_per_epochs_finetune 1 \
-        --finetune_lr 0.0001 \
-        --finetune_lr_decay 0.9 \
-        --finetune_pct_start 0.2 \
-        --pred_len $pred_len \
-        --finetune_head_dropout 0.0 \
         --patience 3 \
-        --device cuda:1 \
-        --use_tqdm
+        --learning_rate 0.0004 \
+        --pct_start 0.3
 done
