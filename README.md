@@ -1,5 +1,5 @@
 # TimeDART
-This is the official PyTorch implementation of the paper: [Diffusion Auto-regressive Transformer for Effective Self-supervised Time Series Forecasting](https://arxiv.org/abs/2410.05711).
+This is the official PyTorch implementation of the paper: Diffusion Auto-regressive Transformer for Effective Self-supervised Time Series Forecasting.
 
 ## Introduction
 
@@ -45,19 +45,4 @@ This repo is built on the pioneer works. We appreciate the following GitHub repo
 
 [GPHT](https://github.com/icantnamemyself/GPHT/tree/main)
 
-### Citation
-
-If you find this repository useful for your work, please consider citing it as follows:
-
-```bibtex
-@misc{wang2024diffusionautoregressivetransformer,
-      title={Diffusion Auto-regressive Transformer for Effective Self-supervised Time Series Forecasting}, 
-      author={Daoyu Wang and Mingyue Cheng and Zhiding Liu and Qi Liu and Enhong Chen},
-      year={2024},
-      eprint={2410.05711},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2410.05711}, 
-}
-```
 
