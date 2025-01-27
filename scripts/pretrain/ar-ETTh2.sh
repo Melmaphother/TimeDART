@@ -1,10 +1,10 @@
 python -u run.py \
     --task_name pretrain \
     --root_path ./datasets/ETT-small/ \
-    --data_path ETTm1.csv \
-    --model_id ETTm1 \
+    --data_path ETTh2.csv \
+    --model_id ETTh2 \
     --model TimeDART \
-    --data ETTm1 \
+    --data ETTh2 \
     --features M \
     --input_len 336 \
     --e_layers 2 \
@@ -13,16 +13,16 @@ python -u run.py \
     --dec_in 7 \
     --c_out 7 \
     --n_heads 8 \
-    --d_model 32 \
-    --d_ff 64 \
+    --d_model 128 \
+    --d_ff 256 \
     --patch_len 2 \
     --stride 2 \
     --head_dropout 0.1 \
     --dropout 0.2 \
     --time_steps 1000 \
     --scheduler cosine \
-    --lr_decay 0.95 \
-    --learning_rate 0.0001 \
-    --batch_size 64 \
+    --lr_decay 0.98 \
+    --learning_rate 0.001 \
+    --batch_size 16 \
     --train_epochs 50 \
-    --gpu 0
+    --gpu 1

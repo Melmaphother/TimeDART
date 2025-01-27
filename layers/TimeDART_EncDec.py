@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from utils.masking import generate_causal_mask, generate_self_only_mask
+import torch.nn.functional as F
+from utils.masking import generate_causal_mask, generate_self_only_mask, generate_partial_mask
 
 
 class ChannelIndependence(nn.Module):
@@ -217,6 +218,7 @@ class DenoisingPatchDecoder(nn.Module):
         num_layers: int,
         feedforward_dim: int,
         dropout: float,
+        mask_ratio: float,
     ):
         super(DenoisingPatchDecoder, self).__init__()
 
@@ -227,14 +229,15 @@ class DenoisingPatchDecoder(nn.Module):
             ]
         )
         self.norm = nn.LayerNorm(d_model)
+        self.mask_ratio = mask_ratio
 
     def forward(self, query, key, value, is_tgt_mask=True, is_src_mask=True):
         seq_len = query.size(1)
         tgt_mask = (
-            generate_self_only_mask(seq_len).to(query.device) if is_tgt_mask else None
+            generate_partial_mask(seq_len, self.mask_ratio).to(query.device) if is_tgt_mask else None
         )
         src_mask = (
-            generate_self_only_mask(seq_len).to(query.device) if is_src_mask else None
+            generate_partial_mask(seq_len, self.mask_ratio).to(query.device) if is_src_mask else None
         )
         for layer in self.layers:
             query = layer(query, key, value, tgt_mask, src_mask)
@@ -242,3 +245,176 @@ class DenoisingPatchDecoder(nn.Module):
         return x
 
 
+class SamePadConv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, dilation=1, groups=1):
+        super().__init__()
+        self.receptive_field = (kernel_size - 1) * dilation + 1
+        self.conv = nn.Conv1d(
+            in_channels, out_channels, kernel_size,
+            padding=(self.receptive_field - 1),  # 左填充
+            dilation=dilation,
+            groups=groups
+        )
+        
+    def forward(self, x):
+        out = self.conv(x)
+        # 裁剪掉多余的未来时间步，确保与输入长度一致
+        return out[:, :, :x.size(2)]
+
+
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, dilation, final=False):
+        super().__init__()
+        self.conv1 = SamePadConv(in_channels, out_channels, kernel_size, dilation=dilation)
+        self.conv2 = SamePadConv(out_channels, out_channels, kernel_size, dilation=dilation)
+        self.projector = nn.Conv1d(in_channels, out_channels, 1) if in_channels != out_channels or final else None
+    
+    def forward(self, x):
+        residual = x if self.projector is None else self.projector(x)
+        x = F.gelu(x)
+        x = self.conv1(x)
+        x = F.gelu(x)
+        x = self.conv2(x)
+        return x + residual
+
+class CausalTCN(nn.Module):
+    def __init__(self, input_dims, output_dims, hidden_dims=64, depth=10, kernel_size=3):
+        super().__init__()
+        self.input_dims = input_dims
+        self.output_dims = output_dims
+        self.hidden_dims = hidden_dims
+        self.depth = depth
+        
+        # First linear layer to map input_dims to hidden_dims
+        self.input_fc = nn.Linear(input_dims, hidden_dims)
+        
+        # Create a dilated causal convolutional encoder
+        self.feature_extractor = DilatedConvEncoder(
+            hidden_dims,
+            [hidden_dims] * (depth - 1) + [output_dims],
+            kernel_size=kernel_size
+        )
+        
+    def forward(self, x):
+        # Input x is of shape [batch_size, seq_len, input_dims]
+        
+        # Flatten input (batch_size, seq_len, input_dims) -> (batch_size, seq_len, hidden_dims)
+        x = self.input_fc(x)
+        
+        # Transpose for the convolution (batch_size, seq_len, hidden_dims) -> (batch_size, hidden_dims, seq_len)
+        x = x.transpose(1, 2)
+        
+        # Apply dilated convolutions
+        x = self.feature_extractor(x)  # [batch_size, hidden_dims, seq_len] -> [batch_size, output_dims, seq_len]
+        
+        # Transpose back to [batch_size, seq_len, output_dims]
+        x = x.transpose(1, 2)
+        
+        return x
+
+
+class DilatedConvEncoder(nn.Module):
+    def __init__(self, in_channels, channels, kernel_size):
+        super().__init__()
+        self.net = nn.Sequential(*[
+            ConvBlock(
+                channels[i-1] if i > 0 else in_channels,
+                channels[i],
+                kernel_size=kernel_size,
+                dilation=2**i,
+                final=(i == len(channels)-1)
+            )
+            for i in range(len(channels))
+        ])
+        
+    def forward(self, x):   
+        """
+        :param x: [batch_size, seq_len, input_dims]
+        :return: [batch_size, seq_len, output_dims]
+        """
+        x = x.transpose(1, 2)
+        return self.net(x).transpose(1, 2)
+
+
+class ClsHead(nn.Module):
+    def __init__(self, seq_len, d_model, num_classes, dropout):
+        super(ClsHead, self).__init__()
+        self.flatten = nn.Flatten(start_dim=-2)
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(seq_len * d_model, num_classes)
+    
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.dropout(x)
+        return self.fc(x)
+
+
+class OldClsHead(nn.Module):
+    def __init__(self, seq_len, d_model, num_classes, dropout):
+        super(OldClsHead, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(d_model, num_classes)
+    
+    def forward(self, x):
+        x = self.dropout(x)
+        return self.fc(torch.max(x, dim=1)[0])
+
+
+class ClsEmbedding(nn.Module):
+    def __init__(self, num_features, d_model, kernel_size, stride, padding):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            in_channels=num_features, 
+            out_channels=d_model, 
+            kernel_size=kernel_size, 
+            stride=stride,
+            padding=padding
+        )
+    
+    def forward(self, x):
+        x = x.transpose(1, 2)
+        return self.conv(x).transpose(1, 2) 
+
+
+class ClsFlattenHead(nn.Module):
+    def __init__(self, seq_len, d_model, pred_len, num_features, dropout):
+        super(ClsFlattenHead, self).__init__()
+        self.pred_len = pred_len
+        self.num_features = num_features
+        self.flatten = nn.Flatten(start_dim=-2)
+        self.forecast_head = nn.Linear(seq_len * d_model, pred_len * num_features)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x):
+        """
+        :param x: [batch_size, seq_len, d_model]
+        :return: [batch_size, pred_len, num_features]
+        """
+        x = self.flatten(x)  # [batch_size, seq_len * d_model]
+        x = self.dropout(x)  # [batch_size, seq_len * d_model]
+        x = self.forecast_head(x)  # [batch_size, pred_len * num_features]
+        return x.reshape(x.size(0), self.pred_len, self.num_features)
+
+
+class ARFlattenHead(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        patch_len: int,
+        dropout: float,
+    ):
+        super(ARFlattenHead, self).__init__()
+        self.flatten = nn.Flatten(start_dim=-2)
+        self.forecast_head = nn.Linear(d_model, patch_len)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        :param x: [batch_size, num_features, seq_len, d_model]
+        :return: [batch_size, seq_len * patch_len, num_features]
+        """
+        x = self.forecast_head(x)  # (batch_size, num_features, seq_len, patch_len)
+        x = self.dropout(x)  # (batch_size, num_features, seq_len, patch_len)
+        x = self.flatten(x)  # (batch_size, num_features, seq_len * patch_len)
+        x = x.permute(0, 2, 1)  # (batch_size, seq_len * patch_len, num_features)
+        return x

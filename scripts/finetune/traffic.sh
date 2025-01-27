@@ -5,7 +5,7 @@ for pred_len in 96 192 336 720; do
         --root_path ./datasets/traffic/ \
         --data_path traffic.csv \
         --model_id Traffic \
-        --model TimeDART \
+        --model SimMTM \
         --data Traffic \
         --features M \
         --input_len 336 \
@@ -23,7 +23,7 @@ for pred_len in 96 192 336 720; do
         --dropout 0.2 \
         --head_dropout 0.1 \
         --batch_size 8 \
-        --gpu 1 \
+        --gpu 0 \
         --lr_decay 0.5 \
         --lradj step \
         --time_steps 1000 \

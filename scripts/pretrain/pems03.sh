@@ -1,28 +1,28 @@
 python -u run.py \
     --task_name pretrain \
-    --root_path ./datasets/ETT-small/ \
-    --data_path ETTh2.csv \
-    --model_id ETTh2 \
+    --root_path ./datasets/PEMS/ \
+    --data_path PEMS03.npz \
+    --model_id PEMS03 \
     --model TimeDART \
-    --data ETTh2 \
+    --data PEMS03 \
     --features M \
-    --input_len 336 \
+    --input_len 96 \
     --e_layers 2 \
     --d_layers 1 \
-    --enc_in 7 \
-    --dec_in 7 \
-    --c_out 7 \
+    --enc_in 358 \
+    --dec_in 358 \
+    --c_out 358 \
     --n_heads 8 \
-    --d_model 8 \
-    --d_ff 32 \
+    --d_model 512 \
+    --d_ff 512 \
     --patch_len 2 \
     --stride 2 \
     --head_dropout 0.1 \
     --dropout 0.2 \
     --time_steps 1000 \
     --scheduler cosine \
-    --lr_decay 0.95 \
+    --lr_decay 0.9 \
     --learning_rate 0.0005 \
-    --batch_size 16 \
-    --train_epochs 50 \
+    --batch_size 8 \
+    --train_epochs 20 \
     --gpu 0

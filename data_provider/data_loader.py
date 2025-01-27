@@ -4,6 +4,7 @@ import pandas as pd
 import glob
 import re
 import torch
+import pickle
 from torch.utils.data import Dataset
 from utils.timefeatures import time_features
 from data_provider.m4 import M4Dataset, M4Meta
@@ -13,6 +14,191 @@ import warnings
 from sklearn.preprocessing import StandardScaler
 
 warnings.filterwarnings('ignore')
+
+# UEA datasets
+class Dataset_Epilepsy(Dataset):
+    def __init__(self, root_path, file_list=None, limit_size=None, flag=None, **kwargs):
+        self.kwargs = kwargs
+        self.root_path = root_path
+        self.feature_df, self.labels_df = self.load_all(root_path, file_list=file_list, flag=flag)
+        
+        # use all features
+        # self.class_names
+        # self.min_val, self.max_val
+        
+        # pre_process
+        # normalizer = Normalizer()
+        # self.feature_df = normalizer.normalize(self.feature_df)
+        # print(self.length)
+        
+    def load_all(self, root_path, file_list=None, flag=None):
+        """
+        Loads datasets from csv files contained in `root_path` into a dataframe, optionally choosing from `pattern`
+        Args:
+            root_path: directory containing all individual .csv files
+            file_list: optionally, provide a list of file paths within `root_path` to consider.
+                Otherwise, entire `root_path` contents will be used.
+        Returns:
+            all_df: a single (possibly concatenated) dataframe with all data corresponding to specified files
+            labels_df: dataframe containing label(s) for each sample
+        """
+        # Select paths for training and evaluation
+        data_p, label_p = None, None
+        if flag == 'train':
+            data_p = os.path.join(root_path, 'train_d.npy')
+            label_p = os.path.join(root_path, 'train_l.npy')
+        elif flag == 'val':
+            data_p = os.path.join(root_path, 'test_d.npy')
+            label_p = os.path.join(root_path, 'test_l.npy')
+        elif flag == 'test':
+            data_p = os.path.join(root_path, 'test_d.npy')
+            label_p = os.path.join(root_path, 'test_l.npy')
+        else:
+            raise Exception("No flag: {}, should be in 'train', 'val' or 'test'".format(flag))
+        
+        datas, labels = np.load(data_p), np.load(label_p)
+        
+        # normalizer = Normalizer(norm_type='minmax', data_type='numpy', axis=(0,1), \
+        #             min_val=self.kwargs['min_val'], max_val=self.kwargs['max_val'])
+        
+        # datas = normalizer.normalize(datas)
+        # self.min_val, self.max_val = normalizer.min_val, normalizer.max_val 
+        
+        # labels = np.expand_dims(labels, axis=1)
+        
+        self.length = datas.shape[0]
+        self.max_seq_len = datas.shape[1]
+        self.class_names = np.unique(labels)
+        
+        print(datas.shape, labels.shape)
+        print(self.class_names)
+
+        return datas, labels 
+    
+    def __getitem__(self, ind):
+        data_x = torch.from_numpy(self.feature_df[ind])
+        data_y = torch.tensor(self.labels_df[ind], dtype=torch.long)
+        x_mark = torch.zeros(data_x.shape)
+        y_mark = torch.zeros(data_y.shape)
+        return data_x, data_y, x_mark, y_mark
+
+    def __len__(self):
+        return self.length
+
+
+class Dataset_PEMS(Dataset):
+    def __init__(self, root_path, flag='train', size=None,
+                 features='S', data_path='ETTh1.csv',
+                 target='OT', scale=True, timeenc=0, freq='h', seasonal_patterns=None):
+        # size [seq_len, label_len, pred_len]
+        # info
+        self.seq_len = size[0]
+        self.label_len = size[1]
+        self.pred_len = size[2]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train': 0, 'val': 1, 'test': 2}
+        self.set_type = type_map[flag]
+
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        data_file = os.path.join(self.root_path, self.data_path)
+        data = np.load(data_file, allow_pickle=True)
+        data = data['data'][:, :, 0]
+
+        train_ratio = 0.6
+        valid_ratio = 0.2
+        train_data = data[:int(train_ratio * len(data))]
+        valid_data = data[int(train_ratio * len(data)): int((train_ratio + valid_ratio) * len(data))]
+        test_data = data[int((train_ratio + valid_ratio) * len(data)):]
+        total_data = [train_data, valid_data, test_data]
+        data = total_data[self.set_type]
+
+        if self.scale:
+            self.scaler.fit(train_data)
+            data = self.scaler.transform(data)
+
+        df = pd.DataFrame(data)
+        df = df.fillna(method='ffill', limit=len(df)).fillna(method='bfill', limit=len(df)).values
+
+        self.data_x = df
+        self.data_y = df
+
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+        seq_x_mark = torch.zeros((seq_x.shape[0], 1))
+        seq_y_mark = torch.zeros((seq_x.shape[0], 1))
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+
+
+class Dataset_Physio(Dataset):
+    def __init__(self, root_path, flag='train', size=None,
+                 features='S', data_path='ETTh1.csv',
+                 target='OT', scale=True, timeenc=0, freq='h',
+                 use_time_features=False
+                 ):
+        
+        self.flag = flag
+        self.root_path = root_path
+        self.use_time_features = False
+        
+        self.__read_data__()
+        
+    def __read_data__(self):
+        if self.flag == 'train':
+            data_path = self.root_path + '/samples_train.pkl'
+        else:
+            data_path = self.root_path + '/samples_test.pkl'
+        
+        #加载数据
+        with open(data_path, 'rb') as file:
+            samples = pickle.load(file)
+            
+        datas, labels = [], []
+        for _, data, label in samples:
+            datas.append(data)
+            labels.append(label)
+        
+        print(len(set(labels)))
+
+        self.data_x = [torch.tensor(data, dtype=torch.float32) for data in datas]
+        self.data_y = [torch.tensor(label, dtype=torch.long) for label in labels]
+        
+        print(self.data_x[0].shape, self.data_y[0].shape)
+
+    def __len__(self):
+        return len(self.data_x)
+
+    def __getitem__(self, item):
+        # Just index the pre-converted tensors
+        # print(self.data_x[item].shape, self.data_y[item].shape)
+        # exit(0)
+        x_mark = torch.zeros(self.data_x[item].shape)
+        y_mark = torch.zeros(self.data_y[item].shape)
+        return self.data_x[item], self.data_y[item], x_mark, y_mark
 
 
 class Dataset_ETT_hour(Dataset):

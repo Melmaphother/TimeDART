@@ -1,0 +1,35 @@
+for pred_len in 12 24 36 48; do
+    python -u run.py \
+        --task_name finetune \
+        --is_training 1 \
+        --root_path ./datasets/PEMS/ \
+        --data_path PEMS07.npz \
+        --model_id PEMS07 \
+        --model TimeDART \
+        --data PEMS07 \
+        --features M \
+        --input_len 96 \
+        --label_len 48 \
+        --pred_len $pred_len \
+        --e_layers 2 \
+        --enc_in 883 \
+        --dec_in 883 \
+        --c_out 883 \
+        --n_heads 8 \
+        --d_model 512 \
+        --d_ff 512 \
+        --patch_len 4 \
+        --stride 4 \
+        --dropout 0.2 \
+        --head_dropout 0.1 \
+        --batch_size 32 \
+        --gpu 1 \
+        --lr_decay 0.5 \
+        --lradj step \
+        --time_steps 1000 \
+        --scheduler cosine \
+        --patience 3 \
+        --learning_rate 0.0005 \
+        --pct_start 0.3 \
+        --use_norm 0
+done

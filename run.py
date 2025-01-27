@@ -1,6 +1,7 @@
 import argparse
 import torch
 from exp.exp_timedart import Exp_TimeDART
+from exp.exp_simmtm import Exp_SimMTM
 import random
 import numpy as np
 import os
@@ -20,6 +21,7 @@ parser.add_argument(
     default="pretrain",
     help="task name, options:[pretrain, finetune]",
 )
+parser.add_argument("--downstream_task", type=str, default="forecast", help="downstream task, options:[forecasting, classification]")
 parser.add_argument("--is_training", type=int, default=1, help="status")
 parser.add_argument(
     "--model_id", type=str, required=True, default="TimeDART", help="model id"
@@ -78,8 +80,15 @@ parser.add_argument(
     default=1,
     help="select the rate of channels to train",
 )
+parser.add_argument(
+    "--use_norm",
+    type=int,
+    default=1,
+    help="use normalization",
+)
 
 # forecasting task
+parser.add_argument("--seq_len", type=int, default=336, help="input sequence length")
 parser.add_argument("--input_len", type=int, default=336, help="input sequence length")
 parser.add_argument("--label_len", type=int, default=0, help="start token length")
 parser.add_argument(
@@ -176,6 +185,20 @@ parser.add_argument(
 )
 
 parser.add_argument("--lr_decay", type=float, default=0.5, help="learning rate decay")
+parser.add_argument("--mask_ratio", type=float, default=1.0, help="mask ratio")
+
+# Classification
+parser.add_argument("--num_classes", type=int, default=6, help="number of classes")
+
+## SimMTM 
+# Pre-train
+parser.add_argument('--lm', type=int, default=3, help='average masking length')
+parser.add_argument('--positive_nums', type=int, default=3, help='masking series numbers')
+parser.add_argument('--rbtp', type=int, default=1, help='0: rebuild the embedding of oral series; 1: rebuild oral series')
+parser.add_argument('--temperature', type=float, default=0.2, help='temperature')
+parser.add_argument('--masked_rule', type=str, default='geometric', help='geometric, random, masked tail, masked head')
+parser.add_argument('--mask_rate', type=float, default=0.5, help='mask ratio')
+
 
 args = parser.parse_args()
 args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
@@ -188,7 +211,13 @@ if args.use_gpu and args.use_multi_gpu:
 print("Args in experiment:")
 print(args)
 
-Exp = Exp_TimeDART
+Exp_map = {
+    "TimeDART": Exp_TimeDART,
+    "SimMTM": Exp_SimMTM,
+}
+
+Exp = Exp_map[args.model]
+
 if args.task_name == "pretrain":
     for ii in range(args.itr):
         # setting record of experiments
@@ -253,8 +282,15 @@ elif args.task_name == "finetune":
         exp = Exp(args)  # set experiments
 
         print(">>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>".format(setting))
-        exp.train(setting)
+        if args.downstream_task == "forecast":
+            exp.train(setting)
+        elif args.downstream_task == "classification":
+            exp.cls_train(setting)
+            pass
 
         print(">>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<".format(setting))
-        exp.test()
+        if args.downstream_task == "forecast":
+            exp.test()
+        elif args.downstream_task == "classification":
+            exp.cls_test()
         torch.cuda.empty_cache()

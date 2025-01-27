@@ -3,7 +3,7 @@ python -u run.py \
     --root_path ./datasets/traffic/ \
     --data_path traffic.csv \
     --model_id Traffic \
-    --model TimeDART \
+    --model SimMTM \
     --data Traffic \
     --features M \
     --input_len 336 \
@@ -25,4 +25,4 @@ python -u run.py \
     --learning_rate 0.0001 \
     --batch_size 8 \
     --train_epochs 50 \
-    --gpu 1
+    --gpu 0

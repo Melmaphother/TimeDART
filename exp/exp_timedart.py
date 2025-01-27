@@ -21,6 +21,7 @@ from collections import OrderedDict
 from tensorboardX import SummaryWriter
 import random
 from tqdm import tqdm
+from sklearn.metrics import accuracy_score, f1_score
 
 warnings.filterwarnings("ignore")
 
@@ -31,19 +32,22 @@ class Exp_TimeDART(Exp_Basic):
         self.writer = SummaryWriter(f"./outputs/logs")
 
     def _build_model(self):
-        model = self.model_dict[self.args.model].Model(self.args).float()
+        if self.args.downstream_task == "forecast":
+            model = self.model_dict[self.args.model].Model(self.args).float()
+        elif self.args.downstream_task == "classification":
+            model = self.model_dict[self.args.model].ClsModel(self.args).float()
 
-        if self.args.load_checkpoints:
-            print("Loading ckpt: {}".format(self.args.load_checkpoints))
+        # if self.args.load_checkpoints:
+        #     print("Loading ckpt: {}".format(self.args.load_checkpoints))
 
-            transfer_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-            model = transfer_weights(
-                self.args.load_checkpoints, model, device=transfer_device
-            )
+        #     transfer_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        #     model = transfer_weights(
+        #         self.args.load_checkpoints, model, device=transfer_device
+        #     )
 
-        if torch.cuda.device_count() > 1:
-            print("Let's use", torch.cuda.device_count(), "GPUs!", self.args.device_ids)
-            model = nn.DataParallel(model, device_ids=self.args.device_ids)
+        # if torch.cuda.device_count() > 1:
+        #     print("Let's use", torch.cuda.device_count(), "GPUs!", self.args.device_ids)
+        #     model = nn.DataParallel(model, device_ids=self.args.device_ids)
 
         # print out the model size
         print(
@@ -62,7 +66,12 @@ class Exp_TimeDART(Exp_Basic):
         return model_optim
 
     def _select_criterion(self):
-        criterion = nn.MSELoss()
+        if self.args.task_name == "finetune" and self.args.downstream_task == "classification":
+            criterion = nn.CrossEntropyLoss()
+            print("Using CrossEntropyLoss")
+        else:
+            criterion = nn.MSELoss()
+            print("Using MSELoss")
         return criterion
 
     def pretrain(self):
@@ -227,7 +236,7 @@ class Exp_TimeDART(Exp_Basic):
             train_loss = []
             train_loader = tqdm(train_loader, desc="Training")
 
-            print("Current learning rate: {:.7f}".format(model_scheduler.get_last_lr()[0]))
+            print("Current learning rate: {:.7f}".format(model_optim.param_groups[0]['lr']))
 
             self.model.train()
             start_time = time.time()
@@ -382,3 +391,180 @@ class Exp_TimeDART(Exp_Basic):
             )
         )
         f.close()
+
+    def cls_train(self, setting):
+        train_data, train_loader = self._get_data(flag="train")
+        vali_data, vali_loader = self._get_data(flag="val")
+        test_data, test_loader = self._get_data(flag="test")
+
+        path = os.path.join(self.args.checkpoints, setting)
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        model_optim = self._select_optimizer()
+        early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
+        model_criteria = self._select_criterion()
+        model_scheduler = lr_scheduler.OneCycleLR(
+            optimizer=model_optim,
+            steps_per_epoch=len(train_loader),
+            pct_start=self.args.pct_start,
+            epochs=self.args.train_epochs,
+            max_lr=self.args.learning_rate,
+        )
+
+        for epoch in range(self.args.train_epochs):
+            train_loss = []
+            train_acc = []
+            train_f1 = []
+
+            print("Current learning rate: {:.7f}".format(model_optim.param_groups[0]['lr']))
+
+            self.model.train()
+            train_loader = tqdm(train_loader)
+            start_time = time.time()
+
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
+                model_optim.zero_grad()
+
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.long().to(self.device)
+
+                outputs = self.model(batch_x)
+                loss = model_criteria(outputs, batch_y)
+
+                loss.backward()
+                model_optim.step()
+                if self.args.lradj == "step":
+                    adjust_learning_rate(
+                        model_optim,
+                        model_scheduler,
+                        epoch + 1,
+                        self.args,
+                        printout=False,
+                    )
+                    model_scheduler.step()
+
+                preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
+                trues = batch_y.detach().cpu().numpy()
+
+                acc = accuracy_score(trues, preds)
+                f1 = f1_score(trues, preds, average='macro')
+
+                train_loss.append(loss.item())
+                train_acc.append(acc)
+                train_f1.append(f1)
+
+            train_loss = np.mean(train_loss)
+            train_acc = np.mean(train_acc)
+            train_f1 = np.mean(train_f1)
+
+            vali_loss, vali_acc, vali_f1 = self.cls_valid(vali_loader, model_criteria)
+            test_loss, test_acc, test_f1 = self.cls_valid(test_loader, model_criteria)
+            self.cls_test(write_log=False)
+
+            end_time = time.time()
+            print(
+                "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | ".format(
+                    epoch + 1, len(train_loader), end_time - start_time
+                ) +
+                "Train Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
+                    train_loss, train_acc, train_f1
+                ) +
+                "Vali Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
+                    vali_loss, vali_acc, vali_f1
+                ) +
+                "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}".format(
+                    test_loss, test_acc, test_f1
+                )
+            )
+            log_path = path + "/" + "log.txt"
+            with open(log_path, "a") as log_file:
+                log_file.write(
+                    "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | Train Loss: {3:.7f}, Acc: {4:.4f}, F1: {5:.4f} | Vali Loss: {6:.7f}, Acc: {7:.4f}, F1: {8:.4f} | Test Loss: {9:.7f}, Acc: {10:.4f}, F1: {11:.4f}\n".format(
+                        epoch + 1, len(train_loader), end_time - start_time, train_loss, train_acc, train_f1, vali_loss, vali_acc, vali_f1, test_loss, test_acc, test_f1
+                    )
+                )
+
+            early_stopping(-vali_acc, self.model, path=path)
+            if early_stopping.early_stop:
+                print("Early stopping")
+                break
+            if self.args.lradj != "step":
+                adjust_learning_rate(model_optim, model_scheduler, epoch + 1, self.args)
+
+        best_model_path = path + "/" + "checkpoint.pth"
+        self.model.load_state_dict(torch.load(best_model_path))
+        return self.model
+
+    def cls_valid(self, vali_loader, model_criteria):
+        vali_acc = []
+        vali_f1 = []
+        vali_loss = []
+
+        self.model.eval()
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.long().to(self.device)
+
+                outputs = self.model(batch_x)
+                loss = model_criteria(outputs, batch_y)
+
+                preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
+                trues = batch_y.detach().cpu().numpy()
+
+                vali_loss.append(loss.item())
+                acc = accuracy_score(trues, preds)
+                f1 = f1_score(trues, preds, average='macro')
+                vali_acc.append(acc)
+                vali_f1.append(f1)
+        
+        vali_loss = np.mean(vali_loss)
+        vali_acc = np.mean(vali_acc)
+        vali_f1 = np.mean(vali_f1)
+
+        return vali_loss, vali_acc, vali_f1
+
+    def cls_test(self, write_log=True):
+        test_data, test_loader = self._get_data(flag="test")
+        model_criteria = self._select_criterion()
+
+        preds_all = []
+        trues_all = []
+        test_loss = []
+
+        folder_path = "./outputs/test_results/{}".format(self.args.data)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+
+        self.model.eval()
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.long().to(self.device)
+
+                outputs = self.model(batch_x)
+                loss = model_criteria(outputs, batch_y)
+
+                preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
+                trues = batch_y.detach().cpu().numpy()
+
+                test_loss.append(loss.item())
+                preds_all.extend(preds)
+                trues_all.extend(trues)
+
+        test_loss = np.mean(test_loss)
+        test_acc = accuracy_score(trues_all, preds_all)
+        test_f1 = f1_score(trues_all, preds_all, average='macro')
+
+        print(
+            "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}".format(
+                test_loss, test_acc, test_f1
+            )
+        )
+        if write_log:
+            f = open(folder_path + "/score.txt", "a")
+            f.write(
+                "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}\n".format(test_loss, test_acc, test_f1)
+            )
+            f.close()

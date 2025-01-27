@@ -3,10 +3,10 @@ for pred_len in 96 192 336 720; do
         --task_name finetune \
         --is_training 1 \
         --root_path ./datasets/ETT-small/ \
-        --data_path ETTm1.csv \
-        --model_id ETTm1 \
+        --data_path ETTh2.csv \
+        --model_id ETTh2 \
         --model TimeDART \
-        --data ETTm1 \
+        --data ETTh2 \
         --features M \
         --input_len 336 \
         --label_len 48 \
@@ -16,14 +16,14 @@ for pred_len in 96 192 336 720; do
         --dec_in 7 \
         --c_out 7 \
         --n_heads 8 \
-        --d_model 32 \
-        --d_ff 64 \
+        --d_model 128 \
+        --d_ff 256 \
         --patch_len 2 \
         --stride 2 \
-        --dropout 0.2 \
-        --head_dropout 0.0 \
-        --batch_size 64 \
-        --gpu 0 \
+        --dropout 0.4 \
+        --head_dropout 0.1 \
+        --batch_size 16 \
+        --gpu 1 \
         --lr_decay 0.5 \
         --lradj decay \
         --time_steps 1000 \

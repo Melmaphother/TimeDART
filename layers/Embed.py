@@ -258,9 +258,9 @@ class PatchEmbedding(nn.Module):
         return x
 
 
-class TokenEmbedding(nn.Module):
+class TokenEmbedding_TimeDART(nn.Module):
     def __init__(self, in_channels, d_model):
-        super(TokenEmbedding, self).__init__()
+        super(TokenEmbedding_TimeDART, self).__init__()
         self.token_embedding = nn.Conv1d(
             in_channels=in_channels,
             out_channels=d_model,

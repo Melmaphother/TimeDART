@@ -1,5 +1,5 @@
 from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_M4, PSMSegLoader, \
-    MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader
+    MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader, Dataset_Physio, Dataset_PEMS, Dataset_Epilepsy
 from data_provider.uea import collate_fn
 from torch.utils.data import DataLoader
 
@@ -21,6 +21,13 @@ data_dict = {
     'SMD': SMDSegLoader,
     'SWAT': SWATSegLoader,
     'UEA': UEAloader,
+    'HAR': Dataset_Physio,
+    'EEG': Dataset_Physio,
+    'PEMS03': Dataset_PEMS,
+    'PEMS04': Dataset_PEMS,
+    'PEMS07': Dataset_PEMS,
+    'PEMS08': Dataset_PEMS,
+    'Epilepsy': Dataset_Epilepsy,
 }
 
 
@@ -29,10 +36,10 @@ def data_provider(args, flag):
 
     timeenc = 0 if args.embed != 'timeF' else 1
 
-    if flag == 'test':
+    if flag == 'test' or flag == 'val':
         shuffle_flag = False
         drop_last = True
-        if args.task_name == 'anomaly_detection' or args.task_name == 'classification':
+        if args.downstream_task == 'anomaly_detection' or args.downstream_task == 'classification':
             batch_size = args.batch_size
         else:
             batch_size = 1  # bsz=1 for evaluation
@@ -43,7 +50,7 @@ def data_provider(args, flag):
         batch_size = args.batch_size  # bsz for train and valid
         freq = args.freq
 
-    if args.task_name == 'anomaly_detection':
+    if args.downstream_task == 'anomaly_detection':
         drop_last = False
         data_set = Data(
             root_path=args.root_path,
@@ -56,9 +63,10 @@ def data_provider(args, flag):
             batch_size=batch_size,
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
-            drop_last=drop_last)
+            drop_last=drop_last
+        )
         return data_set, data_loader
-    elif args.task_name == 'classification':
+    elif args.downstream_task == 'classification':
         drop_last = False
         data_set = Data(
             root_path=args.root_path,
@@ -71,7 +79,7 @@ def data_provider(args, flag):
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
             drop_last=drop_last,
-            collate_fn=lambda x: collate_fn(x, max_len=args.seq_len)
+            # collate_fn=lambda x: collate_fn(x, max_len=args.seq_len)
         )
         return data_set, data_loader
     else:
