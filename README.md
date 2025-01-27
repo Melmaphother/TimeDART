@@ -1,35 +1,33 @@
 # TimeDART
-This is the official PyTorch implementation of the paper: Diffusion Auto-regressive Transformer for Effective Self-supervised Time Series Forecasting.
+This is the official PyTorch implementation of the paper: TimeDART: A Diffusion Autoregressive Transformer \\ 
+for Self-Supervised Time Series Representation
 
 ## Introduction
 
-Our design philosophy centers on integrating two powerful generative approaches: auto-regressive generation and the denoising diffusion model. These two methods complement each other, each leveraging their respective strengths. Auto-Regressive Generation captures the high-level global dependencies within sequence data, while the Denoising Diffusion Model focuses on modeling lowerlevel local regions. Through their combined efforts, the model learns the deep structures and intrinsic patterns within time series data, ultimately improving prediction accuracy and generalization capability.   
-
-The main contribution of this work can be summarized as:
-
-- We propose a novel generative self-supervised learning framework, TimeDART, which integrates diffusion and auto-regressive modeling to effectively learn both global sequence dependencies and local detail features from time series data, addressing the challenges of capturing comprehensive temporal characteristics.
-
-- We design a cross-attention-based denoising decoder within the diffusion mechanism, which enables adjustable optimization difficulty during the self-supervised task. This design significantly enhances the model’s ability to capture localized intra-patch features, improving the effectiveness of pre-training for time series forecasting.
-
-- We conduct extensive experiments to validate that TimeDART achieves more superior performance on time series forecasting tasks. We also report some insight findings to understand the proposed TimeDART.
+Self-supervised learning has garnered increasing attention in time series analysis for benefiting various downstream tasks and reducing reliance on labeled data. 
+Despite its effectiveness, existing methods often struggle to comprehensively capture both long-term dynamic evolution and subtle local patterns in a unified manner.
+In this work, we propose \textbf{TimeDART}, a novel self-supervised time series pre-training framework that unifies two powerful generative paradigms to learn more transferable representations. 
+Specifically, we first employ a \textit{causal} Transformer encoder, accompanied by a patch-based embedding strategy, to model the evolving trends from left to right.
+Building on this global modeling, we further introduce a denoising diffusion process to capture fine-grained local patterns through forward diffusion and reverse denoising. 
+Finally, we optimize the model in an autoregressive manner.
+As a result, TimeDART effectively accounts for both global and local sequence features in a coherent way.
+We conduct extensive experiments on public datasets for time series forecasting and classification. The experimental results demonstrate that TimeDART consistently outperforms previous compared methods, validating the effectiveness of our approach.
 
 ![](assets/model.png)
 
 ## Performance
 
-To evaluate TimeDART, we conduct experiments on 8 popular datasets, including 4 ETT datasets (ETTh1, ETTh2, ETTm1, ETTm2), Weather, Exchange, Electricity, and Traffic. The statistics of these datasets are summarized in the following Table.
-
-### in-domain results
+### Forecasting
 
 ![](assets/table1.png)
 
-### cross-domain results
-
-We also pre-trained on five datasets (ETTh1, ETTh2, ETTm1, ETTm2, Electricity) from the Energy domain and fine-tuned on a specific dataset.
+### Classification
 
 ![](assets/table2.png)
 
 ## Usage
+
+Datasets used in our experiments can be found in [Placeholder].
 
 We provide the default hyper-parameter settings in `scripts/prertrain` to perform pretraining, and ready-to-use scripts for fine-tuning on each datasets in `scripts/finetune`.
 
