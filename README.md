@@ -42,19 +42,3 @@ This repo is built on the pioneer works. We appreciate the following GitHub repo
 [Time-Series-Library](https://github.com/thuml/Time-Series-Library?tab=readme-ov-file)
 
 [GPHT](https://github.com/icantnamemyself/GPHT/tree/main)
-
-## Citation
-
-If you find this repository useful for your work, please consider citing it as follows:
-
-```bibtex
-@misc{wang2024diffusionautoregressivetransformereffective,
-      title={Diffusion Auto-regressive Transformer for Effective Self-supervised Time Series Forecasting}, 
-      author={Daoyu Wang and Mingyue Cheng and Zhiding Liu and Qi Liu and Enhong Chen},
-      year={2024},
-      eprint={2410.05711},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2410.05711}, 
-}
-```
