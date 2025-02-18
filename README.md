@@ -1,10 +1,16 @@
 <div align="center">
   <!-- <h1><b> TimeDART </b></h1> -->
   <!-- <h2><b> TimeDART </b></h2> -->
-  <h2><b> TimeDART: A Diffusion Autoregressive Transformer for Self-Supervised Time Series Representation </b></h2>
+  <h2><b> TimeDART: A Diffusion Autoregressive Transformer <br> for Self-Supervised Time Series Representation </b></h2>
 </div>
 
-![](https://img.shields.io/github/last-commit/Melmaphother/TimeDART?color=green)![](https://img.shields.io/github/stars/Melmaphother/TimeDART?color=yellow)![](https://img.shields.io/github/forks/Melmaphother/TimeDART?color=lightblue)
+<div align="center">
+
+![](https://img.shields.io/github/last-commit/Melmaphother/TimeDART?color=green)
+![](https://img.shields.io/github/stars/Melmaphother/TimeDART?color=yellow)
+![](https://img.shields.io/github/forks/Melmaphother/TimeDART?color=lightblue)
+
+</div>
 
 ---
 
