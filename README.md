@@ -58,6 +58,12 @@ Self-supervised learning has garnered increasing attention in time series analys
 
 Datasets used in our experiments can be found in [Google Drive](https://drive.google.com/drive/folders/19P---oV4nQ53JgKnE0VX3t_N1jLliVSv?usp=drive_link).
 
+```sh
+cd TimeDART
+conda create -n timedart python=3.10
+pip install -r requirements.txt
+```
+
 We provide the default hyper-parameter settings in `scripts/prertrain` to perform pretraining, and ready-to-use scripts for fine-tuning on each datasets in `scripts/finetune`.
 
 ```sh
