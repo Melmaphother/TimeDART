@@ -1,7 +1,12 @@
 <div align="center">
   <!-- <h1><b> TimeDART </b></h1> -->
   <!-- <h2><b> TimeDART </b></h2> -->
-  <h2><b> TimeDART: A Diffusion Autoregressive Transformer <br> for Self-Supervised Time Series Representation </b></h2>
+  <h2>
+    <b> 
+      <img src="assets/dart.png" alt="Dart Image" style="vertical-align: baseline; width: 2em; height: 2em; margin-bottom: -0.2em;">
+      TimeDART: A Diffusion Autoregressive Transformer <br> for Self-Supervised Time Series Representation 
+    </b>
+  </h2>
 </div>
 
 <div align="center">
@@ -36,7 +41,7 @@
 
 🚩 **News** (Jan. 2025): TimeDART is under review.
 
-🚩 **News** (Oct. 2024): TimeDART initialized.
+🚩 **News** (Oct. 2024): TimeDART initialized. "Dart" means a small, pointed object 🎯 thrown to hit a target accurately.
 
 ## Introduction
 
