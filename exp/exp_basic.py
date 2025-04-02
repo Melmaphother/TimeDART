@@ -1,6 +1,6 @@
 import os
 import torch
-from models import TimeDART, SimMTM, PatchTST
+from models import TimeDART, SimMTM, PatchTST, TimeDART_v2
 
 
 class Exp_Basic(object):
@@ -9,7 +9,8 @@ class Exp_Basic(object):
         self.model_dict = {
             'TimeDART': TimeDART,
             'SimMTM': SimMTM,
-            'PatchTST': PatchTST
+            'PatchTST': PatchTST,
+            'TimeDART_v2': TimeDART_v2
         }
         self.device = self._acquire_device()
         self.model = self._build_model().to(self.device)

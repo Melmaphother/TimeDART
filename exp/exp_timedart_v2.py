@@ -26,9 +26,9 @@ from sklearn.metrics import accuracy_score, f1_score
 warnings.filterwarnings("ignore")
 
 
-class Exp_TimeDART(Exp_Basic):
+class Exp_TimeDART_v2(Exp_Basic):
     def __init__(self, args):
-        super(Exp_TimeDART, self).__init__(args)
+        super(Exp_TimeDART_v2, self).__init__(args)
         self.writer = SummaryWriter(f"./outputs/logs")
 
     def _build_model(self):
@@ -66,7 +66,10 @@ class Exp_TimeDART(Exp_Basic):
         return model_optim
 
     def _select_criterion(self):
-        if self.args.task_name == "finetune" and self.args.downstream_task == "classification":
+        if (
+            self.args.task_name == "finetune"
+            and self.args.downstream_task == "classification"
+        ):
             criterion = nn.CrossEntropyLoss()
             print("Using CrossEntropyLoss")
         else:
@@ -75,7 +78,6 @@ class Exp_TimeDART(Exp_Basic):
         return criterion
 
     def pretrain(self):
-
         # data preparation
         train_data, train_loader = self._get_data(flag="train")
         vali_data, vali_loader = self._get_data(flag="val")
@@ -86,8 +88,6 @@ class Exp_TimeDART(Exp_Basic):
 
         # optimizer
         model_optim = self._select_optimizer()
-        # model_optim.add_param_group({'params': self.awl.parameters(), 'weight_decay': 0})
-        # model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=model_optim,T_max=self.args.train_epochs)
         model_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             optimizer=model_optim, gamma=self.args.lr_decay
         )
@@ -98,11 +98,52 @@ class Exp_TimeDART(Exp_Basic):
             start_time = time.time()
 
             # current learning rate
-            print("Current learning rate: {:.7f}".format(model_scheduler.get_last_lr()[0]))
-
-            train_loss = self.pretrain_one_epoch(
-                train_loader, model_optim, model_scheduler
+            print(
+                "Current learning rate: {:.7f}".format(model_scheduler.get_last_lr()[0])
             )
+
+            # Training phase with gradient accumulation
+            train_loss = []
+            model_criterion = self._select_criterion()
+            self.model.train()
+
+            # Initialize gradient accumulation
+            accumulation_steps = 4  # 可以根据需要调整累积步数
+            model_optim.zero_grad()
+
+            train_loader = tqdm(
+                train_loader, desc=f"Epoch {epoch+1}/{self.args.train_epochs}"
+            )
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
+                train_loader
+            ):
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.float().to(self.device)
+
+                pred_x = self.model(batch_x)
+                diff_loss = model_criterion(pred_x, batch_x)
+                # Scale loss by accumulation steps
+                diff_loss = diff_loss / accumulation_steps
+                diff_loss.backward()
+
+                # Gradient accumulation
+                if (i + 1) % accumulation_steps == 0:
+                    model_optim.step()
+                    model_optim.zero_grad()
+
+                train_loss.append(
+                    diff_loss.item() * accumulation_steps
+                )  # Scale back for logging
+
+            # Handle remaining gradients
+            if (i + 1) % accumulation_steps != 0:
+                model_optim.step()
+                model_optim.zero_grad()
+
+            model_scheduler.step()
+            train_loss = np.mean(train_loss)
+
+            # Validation phase
             vali_loss = self.valid_one_epoch(vali_loader)
 
             # log and Loss
@@ -236,7 +277,11 @@ class Exp_TimeDART(Exp_Basic):
             train_loss = []
             train_loader = tqdm(train_loader, desc="Training")
 
-            print("Current learning rate: {:.7f}".format(model_optim.param_groups[0]['lr']))
+            print(
+                "Current learning rate: {:.7f}".format(
+                    model_optim.param_groups[0]["lr"]
+                )
+            )
 
             self.model.train()
             start_time = time.time()
@@ -417,13 +462,19 @@ class Exp_TimeDART(Exp_Basic):
             train_acc = []
             train_f1 = []
 
-            print("Current learning rate: {:.7f}".format(model_optim.param_groups[0]['lr']))
+            print(
+                "Current learning rate: {:.7f}".format(
+                    model_optim.param_groups[0]["lr"]
+                )
+            )
 
             self.model.train()
             train_loader = tqdm(train_loader)
             start_time = time.time()
 
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
+                train_loader
+            ):
                 model_optim.zero_grad()
 
                 batch_x = batch_x.float().to(self.device)
@@ -448,7 +499,7 @@ class Exp_TimeDART(Exp_Basic):
                 trues = batch_y.detach().cpu().numpy()
 
                 acc = accuracy_score(trues, preds)
-                f1 = f1_score(trues, preds, average='macro')
+                f1 = f1_score(trues, preds, average="macro")
 
                 train_loss.append(loss.item())
                 train_acc.append(acc)
@@ -466,14 +517,14 @@ class Exp_TimeDART(Exp_Basic):
             print(
                 "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | ".format(
                     epoch + 1, len(train_loader), end_time - start_time
-                ) +
-                "Train Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
+                )
+                + "Train Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
                     train_loss, train_acc, train_f1
-                ) +
-                "Vali Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
+                )
+                + "Vali Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
                     vali_loss, vali_acc, vali_f1
-                ) +
-                "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}".format(
+                )
+                + "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}".format(
                     test_loss, test_acc, test_f1
                 )
             )
@@ -481,7 +532,18 @@ class Exp_TimeDART(Exp_Basic):
             with open(log_path, "a") as log_file:
                 log_file.write(
                     "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | Train Loss: {3:.7f}, Acc: {4:.4f}, F1: {5:.4f} | Vali Loss: {6:.7f}, Acc: {7:.4f}, F1: {8:.4f} | Test Loss: {9:.7f}, Acc: {10:.4f}, F1: {11:.4f}\n".format(
-                        epoch + 1, len(train_loader), end_time - start_time, train_loss, train_acc, train_f1, vali_loss, vali_acc, vali_f1, test_loss, test_acc, test_f1
+                        epoch + 1,
+                        len(train_loader),
+                        end_time - start_time,
+                        train_loss,
+                        train_acc,
+                        train_f1,
+                        vali_loss,
+                        vali_acc,
+                        vali_f1,
+                        test_loss,
+                        test_acc,
+                        test_f1,
                     )
                 )
 
@@ -503,7 +565,9 @@ class Exp_TimeDART(Exp_Basic):
 
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
+                vali_loader
+            ):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.long().to(self.device)
 
@@ -515,10 +579,10 @@ class Exp_TimeDART(Exp_Basic):
 
                 vali_loss.append(loss.item())
                 acc = accuracy_score(trues, preds)
-                f1 = f1_score(trues, preds, average='macro')
+                f1 = f1_score(trues, preds, average="macro")
                 vali_acc.append(acc)
                 vali_f1.append(f1)
-        
+
         vali_loss = np.mean(vali_loss)
         vali_acc = np.mean(vali_acc)
         vali_f1 = np.mean(vali_f1)
@@ -539,7 +603,9 @@ class Exp_TimeDART(Exp_Basic):
 
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
+                test_loader
+            ):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.long().to(self.device)
 
@@ -555,7 +621,7 @@ class Exp_TimeDART(Exp_Basic):
 
         test_loss = np.mean(test_loss)
         test_acc = accuracy_score(trues_all, preds_all)
-        test_f1 = f1_score(trues_all, preds_all, average='macro')
+        test_f1 = f1_score(trues_all, preds_all, average="macro")
 
         print(
             "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}".format(
@@ -565,6 +631,8 @@ class Exp_TimeDART(Exp_Basic):
         if write_log:
             f = open(folder_path + "/score.txt", "a")
             f.write(
-                "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}\n".format(test_loss, test_acc, test_f1)
+                "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}\n".format(
+                    test_loss, test_acc, test_f1
+                )
             )
             f.close()

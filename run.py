@@ -1,6 +1,7 @@
 import argparse
 import torch
 from exp.exp_timedart import Exp_TimeDART
+from exp.exp_timedart_v2 import Exp_TimeDART_v2
 from exp.exp_simmtm import Exp_SimMTM
 import random
 import numpy as np
@@ -28,6 +29,9 @@ parser.add_argument(
 )
 parser.add_argument(
     "--model", type=str, required=True, default="TimeDART", help="model name"
+)
+parser.add_argument(
+    "--llm_path", type=str, required=True, default="Qwen/Qwen2.5-0.5B", help="llm model path"
 )
 
 # data loader
@@ -213,6 +217,7 @@ print(args)
 
 Exp_map = {
     "TimeDART": Exp_TimeDART,
+    "TimeDART_v2": Exp_TimeDART_v2,
     "SimMTM": Exp_SimMTM,
 }
 
