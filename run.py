@@ -90,6 +90,12 @@ parser.add_argument(
     default=1,
     help="use normalization",
 )
+parser.add_argument(
+    "--accumulation_steps",
+    type=int,
+    default=4,
+    help="number of accumulation steps",
+)
 
 # forecasting task
 parser.add_argument("--seq_len", type=int, default=336, help="input sequence length")
@@ -97,6 +103,9 @@ parser.add_argument("--input_len", type=int, default=336, help="input sequence l
 parser.add_argument("--label_len", type=int, default=0, help="start token length")
 parser.add_argument(
     "--pred_len", type=int, default=96, help="prediction sequence length"
+)
+parser.add_argument(
+    "--test_pred_len", type=int, default=96, help="test prediction sequence length"
 )
 parser.add_argument(
     "--seasonal_patterns", type=str, default="Monthly", help="subset for M4"

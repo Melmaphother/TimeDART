@@ -38,16 +38,20 @@ class Exp_TimeDART_v2(Exp_Basic):
             model = self.model_dict[self.args.model].ClsModel(self.args).float()
 
         # if self.args.load_checkpoints:
-        #     print("Loading ckpt: {}".format(self.args.load_checkpoints))
-
-        #     transfer_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        #     model = transfer_weights(
-        #         self.args.load_checkpoints, model, device=transfer_device
+        #     print(
+        #         "Loading pre-trained checkpoint from: {}".format(
+        #             self.args.load_checkpoints
+        #         )
         #     )
-
-        # if torch.cuda.device_count() > 1:
-        #     print("Let's use", torch.cuda.device_count(), "GPUs!", self.args.device_ids)
-        #     model = nn.DataParallel(model, device_ids=self.args.device_ids)
+        #     checkpoint = torch.load(
+        #         self.args.load_checkpoints, map_location=self.device
+        #     )
+        #     model.load_state_dict(checkpoint["model_state_dict"])
+        #     print(
+        #         "Successfully loaded best pre-trained model from epoch {}".format(
+        #             checkpoint["epoch"]
+        #         )
+        #     )
 
         # print out the model size
         print(
@@ -108,7 +112,7 @@ class Exp_TimeDART_v2(Exp_Basic):
             self.model.train()
 
             # Initialize gradient accumulation
-            accumulation_steps = 4  # 可以根据需要调整累积步数
+            accumulation_steps = self.args.accumulation_steps
             model_optim.zero_grad()
 
             train_loader = tqdm(
@@ -177,57 +181,20 @@ class Exp_TimeDART_v2(Exp_Basic):
                 )
                 min_vali_loss = vali_loss
 
-                self.encoder_state_dict = OrderedDict()
-                for k, v in self.model.state_dict().items():
-                    if "encoder" in k or "enc_embedding" in k:
-                        if "module." in k:
-                            k = k.replace("module.", "")  # multi-gpu
-                        self.encoder_state_dict[k] = v
-                encoder_ckpt = {
+                # Save best model with all parameters
+                model_ckpt = {
                     "epoch": epoch,
-                    "model_state_dict": self.encoder_state_dict,
+                    "model_state_dict": self.model.state_dict(),
                 }
-                torch.save(encoder_ckpt, os.path.join(path, f"ckpt_best.pth"))
+                torch.save(model_ckpt, os.path.join(path, f"ckpt_best.pth"))
 
-            if (epoch + 1) % 10 == 0:
-                print("Saving model at epoch {}...".format(epoch + 1))
-
-                self.encoder_state_dict = OrderedDict()
-                for k, v in self.model.state_dict().items():
-                    if "encoder" in k or "enc_embedding" in k:
-                        if "module." in k:
-                            k = k.replace("module.", "")
-                        self.encoder_state_dict[k] = v
-                encoder_ckpt = {
-                    "epoch": epoch,
-                    "model_state_dict": self.encoder_state_dict,
-                }
-                torch.save(encoder_ckpt, os.path.join(path, f"ckpt{epoch + 1}.pth"))
-
-    def pretrain_one_epoch(self, train_loader, model_optim, model_scheduler):
-        train_loss = []
-        model_criterion = self._select_criterion()
-
-        self.model.train()
-        for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
-            train_loader
-        ):
-            model_optim.zero_grad()
-
-            batch_x = batch_x.float().to(self.device)
-            batch_y = batch_y.float().to(self.device)
-
-            pred_x = self.model(batch_x)
-            diff_loss = model_criterion(pred_x, batch_x)
-            diff_loss.backward()
-
-            model_optim.step()
-            train_loss.append(diff_loss.item())
-
-        model_scheduler.step()
-        train_loss = np.mean(train_loss)
-
-        return train_loss
+            # Save checkpoint for every epoch
+            print("Saving model at epoch {}...".format(epoch + 1))
+            model_ckpt = {
+                "epoch": epoch,
+                "model_state_dict": self.model.state_dict(),
+            }
+            torch.save(model_ckpt, os.path.join(path, f"ckpt{epoch + 1}.pth"))
 
     def valid_one_epoch(self, vali_loader):
         vali_loss = []
@@ -286,25 +253,36 @@ class Exp_TimeDART_v2(Exp_Basic):
             self.model.train()
             start_time = time.time()
 
+            # Initialize gradient accumulation
+            accumulation_steps = self.args.accumulation_steps
+            model_optim.zero_grad()
+
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
                 train_loader
             ):
                 iter_count += 1
-                model_optim.zero_grad()
 
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
-                pred_x = self.model(batch_x)
+                pred_x = self.model(batch_x, batch_y)  # 训练时传入batch_y
 
                 f_dim = -1 if self.args.features == "MS" else 0
 
-                pred_x = pred_x[:, -self.args.pred_len :, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len :, f_dim:]
-
                 loss = model_criteria(pred_x, batch_y)
+                # Scale loss by accumulation steps
+                loss = loss / accumulation_steps
                 loss.backward()
-                model_optim.step()
+
+                # Gradient accumulation
+                if (i + 1) % accumulation_steps == 0:
+                    model_optim.step()
+                    model_optim.zero_grad()
+
+                train_loss.append(
+                    loss.item() * accumulation_steps
+                )  # Scale back for logging
+
                 if self.args.lradj == "step":
                     adjust_learning_rate(
                         model_optim,
@@ -315,33 +293,34 @@ class Exp_TimeDART_v2(Exp_Basic):
                     )
                     model_scheduler.step()
 
-                train_loss.append(loss.item())
+            # Handle remaining gradients
+            if (i + 1) % accumulation_steps != 0:
+                model_optim.step()
+                model_optim.zero_grad()
 
             train_loss = np.mean(train_loss)
             vali_loss = self.valid(vali_loader, model_criteria)
-            test_loss = self.valid(test_loader, model_criteria)
+            # test_loss = self.valid(test_loader, model_criteria)
 
             end_time = time.time()
             print(
-                "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | Train Loss: {3:.7f} Vali Loss: {4:.7f} Test Loss: {5:.7f}".format(
+                "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | Train Loss: {3:.7f} Vali Loss: {4:.7f}".format(
                     epoch + 1,
                     len(train_loader),
                     end_time - start_time,
                     train_loss,
                     vali_loss,
-                    test_loss,
                 )
             )
             log_path = path + "/" + "log.txt"
             with open(log_path, "a") as log_file:
                 log_file.write(
-                    "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | Train Loss: {3:.7f} Vali Loss: {4:.7f} Test Loss: {5:.7f}\n".format(
+                    "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | Train Loss: {3:.7f} Vali Loss: {4:.7f}\n".format(
                         epoch + 1,
                         len(train_loader),
                         end_time - start_time,
                         train_loss,
                         vali_loss,
-                        test_loss,
                     )
                 )
             early_stopping(vali_loss, self.model, path=path)
@@ -369,12 +348,9 @@ class Exp_TimeDART_v2(Exp_Basic):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
-                pred_x = self.model(batch_x)
+                pred_x = self.model(batch_x, batch_y)  # 验证时传入batch_y
 
                 f_dim = -1 if self.args.features == "MS" else 0
-
-                pred_x = pred_x[:, -self.args.pred_len :, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len :, f_dim:]
 
                 pred = pred_x.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -398,6 +374,7 @@ class Exp_TimeDART_v2(Exp_Basic):
             os.makedirs(folder_path)
 
         self.model.eval()
+        test_loader = tqdm(test_loader, desc="Testing")
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
                 test_loader
@@ -405,12 +382,9 @@ class Exp_TimeDART_v2(Exp_Basic):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
-                pred_x = self.model(batch_x)
+                pred_x = self.model(batch_x)  # 测试时不传入batch_y，使用自回归生成
 
                 f_dim = -1 if self.args.features == "MS" else 0
-
-                pred_x = pred_x[:, -self.args.pred_len :, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len :, f_dim:]
 
                 pred = pred_x.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -436,203 +410,3 @@ class Exp_TimeDART_v2(Exp_Basic):
             )
         )
         f.close()
-
-    def cls_train(self, setting):
-        train_data, train_loader = self._get_data(flag="train")
-        vali_data, vali_loader = self._get_data(flag="val")
-        test_data, test_loader = self._get_data(flag="test")
-
-        path = os.path.join(self.args.checkpoints, setting)
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        model_optim = self._select_optimizer()
-        early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
-        model_criteria = self._select_criterion()
-        model_scheduler = lr_scheduler.OneCycleLR(
-            optimizer=model_optim,
-            steps_per_epoch=len(train_loader),
-            pct_start=self.args.pct_start,
-            epochs=self.args.train_epochs,
-            max_lr=self.args.learning_rate,
-        )
-
-        for epoch in range(self.args.train_epochs):
-            train_loss = []
-            train_acc = []
-            train_f1 = []
-
-            print(
-                "Current learning rate: {:.7f}".format(
-                    model_optim.param_groups[0]["lr"]
-                )
-            )
-
-            self.model.train()
-            train_loader = tqdm(train_loader)
-            start_time = time.time()
-
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
-                train_loader
-            ):
-                model_optim.zero_grad()
-
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.long().to(self.device)
-
-                outputs = self.model(batch_x)
-                loss = model_criteria(outputs, batch_y)
-
-                loss.backward()
-                model_optim.step()
-                if self.args.lradj == "step":
-                    adjust_learning_rate(
-                        model_optim,
-                        model_scheduler,
-                        epoch + 1,
-                        self.args,
-                        printout=False,
-                    )
-                    model_scheduler.step()
-
-                preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
-                trues = batch_y.detach().cpu().numpy()
-
-                acc = accuracy_score(trues, preds)
-                f1 = f1_score(trues, preds, average="macro")
-
-                train_loss.append(loss.item())
-                train_acc.append(acc)
-                train_f1.append(f1)
-
-            train_loss = np.mean(train_loss)
-            train_acc = np.mean(train_acc)
-            train_f1 = np.mean(train_f1)
-
-            vali_loss, vali_acc, vali_f1 = self.cls_valid(vali_loader, model_criteria)
-            test_loss, test_acc, test_f1 = self.cls_valid(test_loader, model_criteria)
-            self.cls_test(write_log=False)
-
-            end_time = time.time()
-            print(
-                "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | ".format(
-                    epoch + 1, len(train_loader), end_time - start_time
-                )
-                + "Train Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
-                    train_loss, train_acc, train_f1
-                )
-                + "Vali Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f} | ".format(
-                    vali_loss, vali_acc, vali_f1
-                )
-                + "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}".format(
-                    test_loss, test_acc, test_f1
-                )
-            )
-            log_path = path + "/" + "log.txt"
-            with open(log_path, "a") as log_file:
-                log_file.write(
-                    "Epoch: {0}, Steps: {1}, Time: {2:.2f}s | Train Loss: {3:.7f}, Acc: {4:.4f}, F1: {5:.4f} | Vali Loss: {6:.7f}, Acc: {7:.4f}, F1: {8:.4f} | Test Loss: {9:.7f}, Acc: {10:.4f}, F1: {11:.4f}\n".format(
-                        epoch + 1,
-                        len(train_loader),
-                        end_time - start_time,
-                        train_loss,
-                        train_acc,
-                        train_f1,
-                        vali_loss,
-                        vali_acc,
-                        vali_f1,
-                        test_loss,
-                        test_acc,
-                        test_f1,
-                    )
-                )
-
-            early_stopping(-vali_acc, self.model, path=path)
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
-            if self.args.lradj != "step":
-                adjust_learning_rate(model_optim, model_scheduler, epoch + 1, self.args)
-
-        best_model_path = path + "/" + "checkpoint.pth"
-        self.model.load_state_dict(torch.load(best_model_path))
-        return self.model
-
-    def cls_valid(self, vali_loader, model_criteria):
-        vali_acc = []
-        vali_f1 = []
-        vali_loss = []
-
-        self.model.eval()
-        with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
-                vali_loader
-            ):
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.long().to(self.device)
-
-                outputs = self.model(batch_x)
-                loss = model_criteria(outputs, batch_y)
-
-                preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
-                trues = batch_y.detach().cpu().numpy()
-
-                vali_loss.append(loss.item())
-                acc = accuracy_score(trues, preds)
-                f1 = f1_score(trues, preds, average="macro")
-                vali_acc.append(acc)
-                vali_f1.append(f1)
-
-        vali_loss = np.mean(vali_loss)
-        vali_acc = np.mean(vali_acc)
-        vali_f1 = np.mean(vali_f1)
-
-        return vali_loss, vali_acc, vali_f1
-
-    def cls_test(self, write_log=True):
-        test_data, test_loader = self._get_data(flag="test")
-        model_criteria = self._select_criterion()
-
-        preds_all = []
-        trues_all = []
-        test_loss = []
-
-        folder_path = "./outputs/test_results/{}".format(self.args.data)
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
-        self.model.eval()
-        with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
-                test_loader
-            ):
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.long().to(self.device)
-
-                outputs = self.model(batch_x)
-                loss = model_criteria(outputs, batch_y)
-
-                preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
-                trues = batch_y.detach().cpu().numpy()
-
-                test_loss.append(loss.item())
-                preds_all.extend(preds)
-                trues_all.extend(trues)
-
-        test_loss = np.mean(test_loss)
-        test_acc = accuracy_score(trues_all, preds_all)
-        test_f1 = f1_score(trues_all, preds_all, average="macro")
-
-        print(
-            "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}".format(
-                test_loss, test_acc, test_f1
-            )
-        )
-        if write_log:
-            f = open(folder_path + "/score.txt", "a")
-            f.write(
-                "Test Loss: {:.7f}, Acc: {:.4f}, F1: {:.4f}\n".format(
-                    test_loss, test_acc, test_f1
-                )
-            )
-            f.close()

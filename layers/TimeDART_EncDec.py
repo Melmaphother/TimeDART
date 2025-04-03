@@ -7,18 +7,17 @@ from utils.masking import generate_causal_mask, generate_self_only_mask, generat
 class ChannelIndependence(nn.Module):
     def __init__(
         self,
-        input_len: int,
     ):
         super(ChannelIndependence, self).__init__()
-        self.input_len = input_len
 
     def forward(self, x):
         """
         :param x: [batch_size, input_len, num_features]
         :return: [batch_size * num_features, input_len, 1]
         """
+        _, input_len, _ = x.shape
         x = x.permute(0, 2, 1)
-        x = x.reshape(-1, self.input_len, 1)
+        x = x.reshape(-1, input_len, 1)
         return x
 
 

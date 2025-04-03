@@ -61,9 +61,7 @@ class Model(nn.Module):
         self.task_name = args.task_name
         self.pred_len = args.pred_len
         self.use_norm = args.use_norm
-        self.channel_independence = ChannelIndependence(
-            input_len=self.input_len,
-        )
+        self.channel_independence = ChannelIndependence()
 
         # Patch
         self.patch_len = args.patch_len
@@ -122,17 +120,17 @@ class Model(nn.Module):
                 mask_ratio=args.mask_ratio,
             )
 
-            self.projection = FlattenHead(
-                seq_len=self.seq_len,
-                d_model=self.d_model,
-                pred_len=args.input_len,
-                dropout=args.head_dropout,
-            )
-            # self.projection = ARFlattenHead(
+            # self.projection = FlattenHead(
+            #     seq_len=self.seq_len,
             #     d_model=self.d_model,
-            #     patch_len=self.patch_len,
+            #     pred_len=args.input_len,
             #     dropout=args.head_dropout,
             # )
+            self.projection = ARFlattenHead(
+                d_model=self.d_model,
+                patch_len=self.patch_len,
+                dropout=args.head_dropout,
+            )
 
         elif self.task_name == "finetune":
             self.head = FlattenHead(

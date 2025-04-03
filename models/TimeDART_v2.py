@@ -4,10 +4,15 @@ from transformers import AutoModelForCausalLM
 from layers.TimeDART_EncDec import (
     ChannelIndependence,
     AddSosTokenAndDropLast,
+    CausalTransformer,
     Diffusion,
     DenoisingPatchDecoder,
+    DilatedConvEncoder,
     ClsEmbedding,
+    ClsHead,
+    OldClsHead,
     ClsFlattenHead,
+    ARFlattenHead,
 )
 from layers.Embed import Patch, PatchEmbedding, PositionalEncoding
 import os
@@ -58,9 +63,7 @@ class Model(nn.Module):
         self.task_name = args.task_name
         self.pred_len = args.pred_len
         self.use_norm = args.use_norm
-        self.channel_independence = ChannelIndependence(
-            input_len=self.input_len,
-        )
+        self.channel_independence = ChannelIndependence()
 
         # Patch
         self.patch_len = args.patch_len
@@ -101,22 +104,20 @@ class Model(nn.Module):
         )
 
         # Decoder for pretrain
-        if self.task_name == "pretrain":
-            self.denoising_patch_decoder = DenoisingPatchDecoder(
-                d_model=args.d_model,
-                num_layers=args.d_layers,
-                num_heads=args.n_heads,
-                feedforward_dim=args.d_ff,
-                dropout=args.dropout,
-                mask_ratio=args.mask_ratio,
-            )
+        self.denoising_patch_decoder = DenoisingPatchDecoder(
+            d_model=args.d_model,
+            num_layers=args.d_layers,
+            num_heads=args.n_heads,
+            feedforward_dim=args.d_ff,
+            dropout=args.dropout,
+            mask_ratio=args.mask_ratio,
+        )
 
-            self.projection = FlattenHead(
-                seq_len=self.seq_len,
-                d_model=self.d_model,
-                pred_len=args.input_len,
-                dropout=args.head_dropout,
-            )
+        self.projection = ARFlattenHead(
+            d_model=self.d_model,
+            patch_len=self.patch_len,
+            dropout=args.head_dropout,
+        )
 
     def _acquire_device(self):
         if self.args.use_gpu:
@@ -212,8 +213,210 @@ class Model(nn.Module):
 
         return predict_x
 
-    def forward(self, x):
+    def forecast_train(self, x, y):
+        """Training function for forecasting task
+        Args:
+            x: look-back window, shape [batch_size, input_len, num_features]
+            y: predicted window, shape [batch_size, pred_len, num_features]
+        """
+        batch_size, input_len, num_features = x.size()
+
+        # Instance Normalization for both x and y if needed
+        if self.use_norm:
+            # For look-back window
+            x_means = torch.mean(x, dim=1, keepdim=True).detach()
+            x = x - x_means
+            x_stdevs = torch.sqrt(
+                torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5
+            ).detach()
+            x = x / x_stdevs
+
+        # Process look-back window
+        x = self.channel_independence(x)  # [batch_size * num_features, input_len, 1]
+        x_patch = self.patch(x)  # [batch_size * num_features, seq_len, patch_len]
+        x_embedding = self.enc_embedding(
+            x_patch
+        )  # [batch_size * num_features, seq_len, d_model]
+        x_embedding_bias = self.add_sos_token_and_drop_last(
+            x_embedding
+        )  # [batch_size * num_features, seq_len, d_model]
+        x_embedding_bias = self.positional_encoding(
+            x_embedding_bias
+        )  # [batch_size * num_features, seq_len, d_model]
+
+        # Get encoder outputs from look-back window
+        encoder_outputs = self.encoder(
+            inputs_embeds=x_embedding_bias, output_hidden_states=True, return_dict=True
+        )
+        x_out = encoder_outputs.hidden_states[-1]  # Use last hidden state as KV
+
+        # x_out: [batch_size * num_features, seq_len, d_model]
+
+        # Process predicted window
+        y = self.channel_independence(y)  # [batch_size * num_features, pred_len, 1]
+        y_patch = self.patch(y)  # [batch_size * num_features, seq_len_pred, patch_len]
+
+        # Apply diffusion to predicted window patches
+        noise_y_patch, noise, t = self.diffusion(
+            y_patch
+        )  # [batch_size * num_features, seq_len_pred, patch_len]
+        noise_y_embedding = self.enc_embedding(
+            noise_y_patch
+        )  # [batch_size * num_features, seq_len_pred, d_model]
+        noise_y_embedding_bias = self.add_sos_token_and_drop_last(
+            noise_y_embedding
+        )  # [batch_size * num_features, seq_len_pred, d_model]
+        noise_y_embedding_bias = self.positional_encoding(
+            noise_y_embedding_bias
+        )  # [batch_size * num_features, seq_len_pred, d_model]
+
+        # Denoising decoder
+        predict_y = self.denoising_patch_decoder(
+            query=noise_y_embedding_bias,
+            key=x_out,
+            value=x_out,
+            is_tgt_mask=True,
+            is_src_mask=False,
+        )  # [batch_size * num_features, seq_len_pred, d_model]
+
+        # Project to original space using ARFlattenHead
+        predict_y = predict_y.reshape(
+            batch_size, num_features, -1, self.d_model
+        )  # [batch_size, num_features, seq_len_pred, d_model]
+        predict_y = self.projection(
+            predict_y
+        )  # [batch_size, seq_len_pred * patch_len, num_features]
+
+        # predict_y: [batch_size, pred_len, num_features]
+
+        # Instance Denormalization if needed
+        if self.use_norm:
+            predict_y = predict_y * x_stdevs[:, 0, :].unsqueeze(1).repeat(
+                1, predict_y.size(1), 1
+            )
+            predict_y = predict_y + x_means[:, 0, :].unsqueeze(1).repeat(
+                1, predict_y.size(1), 1
+            )
+
+        return predict_y
+
+    def forecasting_test(self, x, max_len):
+        """Test function for forecasting task with auto-regressive generation
+        Args:
+            x: initial look-back window, shape [batch_size, input_len, num_features]
+            max_len: maximum length to generate (pred_len)
+        """
+        batch_size, input_len, num_features = x.size()
+        device = x.device
+
+        # Store the original statistics for denormalization
+        if self.use_norm:
+            x_means = torch.mean(x, dim=1, keepdim=True).detach()
+            x_stdevs = torch.sqrt(
+                torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5
+            ).detach()
+            x = (x - x_means) / x_stdevs
+
+        # Initialize output sequence with look-back window
+        generated_sequence = [x]  # [batch_size, input_len, num_features]
+        current_input = x  # [batch_size, input_len, num_features]
+
+        # Calculate number of patches needed to generate pred_len
+        num_patches_needed = (max_len + self.patch_len - 1) // self.patch_len
+
+        for step in range(num_patches_needed):
+            # Process current input through encoder
+            current_x = self.channel_independence(
+                current_input
+            )  # [batch_size * num_features, input_len, 1]
+            current_x_patch = self.patch(
+                current_x
+            )  # [batch_size * num_features, seq_len, patch_len]
+            current_x_embedding = self.enc_embedding(
+                current_x_patch
+            )  # [batch_size * num_features, seq_len, d_model]
+            current_x_embedding = self.positional_encoding(
+                current_x_embedding
+            )  # [batch_size * num_features, seq_len, d_model]
+
+            # Get encoder outputs
+            encoder_outputs = self.encoder(
+                inputs_embeds=current_x_embedding,
+                output_hidden_states=True,
+                return_dict=True,
+            )
+            x_out = encoder_outputs.hidden_states[
+                -1
+            ]  # [batch_size * num_features, seq_len, d_model]
+
+            # Generate gaussian noise for next step prediction
+            noise_shape = (batch_size * num_features, 1, self.patch_len)  # One patch
+            gaussian_noise = torch.randn(
+                noise_shape, device=device
+            )  # [batch_size * num_features, 1, patch_len]
+
+            # Process noise through embedding
+            noise_embedding = self.enc_embedding(
+                gaussian_noise
+            )  # [batch_size * num_features, 1, d_model]
+            noise_embedding = self.positional_encoding(
+                noise_embedding
+            )  # [batch_size * num_features, 1, d_model]
+
+            # Denoising decoder
+            predict_patch = self.denoising_patch_decoder(
+                query=noise_embedding,
+                key=x_out,
+                value=x_out,
+                is_tgt_mask=True,
+                is_src_mask=False,
+            )  # [batch_size * num_features, 1, d_model]
+
+            # Project to original space using ARFlattenHead
+            predict_patch = predict_patch.reshape(
+                batch_size, num_features, -1, self.d_model
+            )  # [batch_size, num_features, seq_len_pred, d_model]
+            predict_patch = self.projection(
+                predict_patch
+            )  # [batch_size, seq_len_pred * patch_len, num_features]
+
+            # Take only the last patch_len predictions
+            predict_patch = predict_patch[
+                :, : self.patch_len, :
+            ]  # [batch_size, patch_len, num_features]
+
+            # Denormalize if needed
+            if self.use_norm:
+                predict_patch = predict_patch * x_stdevs[:, 0, :].unsqueeze(1).repeat(
+                    1, predict_patch.size(1), 1
+                )
+                predict_patch = predict_patch + x_means[:, 0, :].unsqueeze(1).repeat(
+                    1, predict_patch.size(1), 1
+                )  # [batch_size, patch_len, num_features]
+
+            # Append prediction and update input
+            generated_sequence.append(
+                predict_patch
+            )  # [batch_size, input_len + patch_len, num_features]
+
+            # Update input window by removing oldest patch and adding new prediction
+            current_input = torch.cat(
+                [current_input[:, self.patch_len :, :], predict_patch], dim=1
+            )  # [batch_size, input_len + patch_len, num_features]
+
+        # Concatenate all predictions and trim to exact pred_len
+        predictions = torch.cat(
+            generated_sequence[1:], dim=1
+        )  # [batch_size, input_len + pred_len, num_features]
+        return predictions[:, -max_len:, :]  # [batch_size, pred_len, num_features]
+
+    def forward(self, x, y=None):
         if self.task_name == "pretrain":
             return self.pretrain(x)
+        elif self.task_name == "finetune":
+            if y is not None:  # Training mode
+                return self.forecast_train(x, y)
+            else:  # Testing mode
+                return self.forecasting_test(x, self.pred_len)
         else:
             raise ValueError(f"Task name {self.task_name} not supported")
