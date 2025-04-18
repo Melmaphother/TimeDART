@@ -31,9 +31,11 @@ parser.add_argument(
     "--model", type=str, required=True, default="TimeDART", help="model name"
 )
 parser.add_argument(
-    "--llm_path", type=str, required=True, default="Qwen/Qwen2.5-0.5B", help="llm model path"
+    "--llm_path", type=str, default="Qwen/Qwen2.5-0.5B", help="llm model path"
 )
-
+parser.add_argument(
+    "--backbone", type=str, default="Qwen2.5-0.5B", help="backbone model name"
+)
 # data loader
 parser.add_argument(
     "--data", type=str, required=True, default="ETTh1", help="dataset type"

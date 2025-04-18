@@ -37,17 +37,17 @@ class Exp_TimeDART(Exp_Basic):
         elif self.args.downstream_task == "classification":
             model = self.model_dict[self.args.model].ClsModel(self.args).float()
 
-        # if self.args.load_checkpoints:
-        #     print("Loading ckpt: {}".format(self.args.load_checkpoints))
+        if self.args.load_checkpoints:
+            print("Loading ckpt: {}".format(self.args.load_checkpoints))
 
-        #     transfer_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        #     model = transfer_weights(
-        #         self.args.load_checkpoints, model, device=transfer_device
-        #     )
+            transfer_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            model = transfer_weights(
+                self.args.load_checkpoints, model, device=transfer_device
+            )
 
-        # if torch.cuda.device_count() > 1:
-        #     print("Let's use", torch.cuda.device_count(), "GPUs!", self.args.device_ids)
-        #     model = nn.DataParallel(model, device_ids=self.args.device_ids)
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!", self.args.device_ids)
+            model = nn.DataParallel(model, device_ids=self.args.device_ids)
 
         # print out the model size
         print(

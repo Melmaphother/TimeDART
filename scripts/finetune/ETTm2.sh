@@ -20,8 +20,8 @@ for pred_len in 96 192 336 720; do
         --d_ff 16 \
         --patch_len 2 \
         --stride 2 \
-        --dropout 0.4 \
-        --head_dropout 0.1 \
+        --dropout 0.2 \
+        --head_dropout 0.0 \
         --batch_size 64 \
         --gpu 0 \
         --lr_decay 0.5 \

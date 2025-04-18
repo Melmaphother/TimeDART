@@ -134,14 +134,25 @@ class Model(nn.Module):
 
     def __init_encoder(self):
         """Initialize Qwen2.5-0.5B encoder"""
-        encoder = AutoModelForCausalLM.from_pretrained(
-            self.args.llm_path,
-            output_attentions=True,
-            output_hidden_states=True,
-            device_map=self.device,
-            trust_remote_code=True,
-            attn_implementation="eager",
-        )
+        if self.args.backbone == "Qwen2.5-0.5B":
+            encoder = AutoModelForCausalLM.from_pretrained(
+                self.args.llm_path,
+                output_attentions=True,
+                output_hidden_states=True,
+                device_map=self.device,
+                trust_remote_code=True,
+                attn_implementation="eager",
+            )
+        elif self.args.backbone == "Transformer":
+            encoder = CausalTransformer(
+                d_model=self.d_model,
+                num_heads=self.num_heads,
+                num_layers=self.args.e_layers,
+                feedforward_dim=self.feedforward_dim,
+                dropout=self.dropout,
+            )
+        else:
+            raise ValueError(f"Backbone {self.args.backbone} not supported")
         return encoder
 
     def pretrain(self, x):
@@ -173,10 +184,16 @@ class Model(nn.Module):
         x_embedding_bias = self.positional_encoding(x_embedding_bias)
 
         # Get encoder outputs from Qwen2.5-0.5B
-        encoder_outputs = self.encoder(
-            inputs_embeds=x_embedding_bias, output_hidden_states=True, return_dict=True
-        )
-        x_out = encoder_outputs.hidden_states[-1]  # Use last hidden state
+        if self.args.backbone == "Qwen2.5-0.5B":
+            encoder_outputs = self.encoder(
+                inputs_embeds=x_embedding_bias, output_hidden_states=True, return_dict=True
+            )
+            x_out = encoder_outputs.hidden_states[-1]  # Use last hidden state
+        elif self.args.backbone == "Transformer":
+            x_out = self.encoder(
+                x_embedding_bias,
+                is_mask=True,
+            )
 
         # Noising Diffusion
         noise_x_patch, noise, t = self.diffusion(
@@ -245,10 +262,16 @@ class Model(nn.Module):
         )  # [batch_size * num_features, seq_len, d_model]
 
         # Get encoder outputs from look-back window
-        encoder_outputs = self.encoder(
-            inputs_embeds=x_embedding_bias, output_hidden_states=True, return_dict=True
-        )
-        x_out = encoder_outputs.hidden_states[-1]  # Use last hidden state as KV
+        if self.args.backbone == "Qwen2.5-0.5B":
+            encoder_outputs = self.encoder(
+                inputs_embeds=x_embedding_bias, output_hidden_states=True, return_dict=True
+            )
+            x_out = encoder_outputs.hidden_states[-1]  # Use last hidden state as KV
+        elif self.args.backbone == "Transformer":
+            x_out = self.encoder(
+                x_embedding_bias,
+                is_mask=True,
+            )
 
         # x_out: [batch_size * num_features, seq_len, d_model]
 
@@ -340,14 +363,20 @@ class Model(nn.Module):
             )  # [batch_size * num_features, seq_len, d_model]
 
             # Get encoder outputs
-            encoder_outputs = self.encoder(
-                inputs_embeds=current_x_embedding,
-                output_hidden_states=True,
-                return_dict=True,
-            )
-            x_out = encoder_outputs.hidden_states[
-                -1
-            ]  # [batch_size * num_features, seq_len, d_model]
+            if self.args.backbone == "Qwen2.5-0.5B":
+                encoder_outputs = self.encoder(
+                    inputs_embeds=current_x_embedding,
+                    output_hidden_states=True,
+                    return_dict=True,
+                )
+                x_out = encoder_outputs.hidden_states[
+                    -1
+                ]  # [batch_size * num_features, seq_len, d_model]
+            elif self.args.backbone == "Transformer":
+                x_out = self.encoder(
+                    current_x_embedding,
+                    is_mask=True,
+                )
 
             # Generate gaussian noise for next step prediction
             noise_shape = (batch_size * num_features, 1, self.patch_len)  # One patch

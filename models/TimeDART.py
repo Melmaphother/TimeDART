@@ -14,7 +14,7 @@ from layers.TimeDART_EncDec import (
     ClsFlattenHead,
     ARFlattenHead,
 )
-from layers.Embed import Patch, PatchEmbedding, PositionalEncoding
+from layers.Embed import Patch, PatchEmbedding, PositionalEncoding, TokenEmbedding_TimeDART
 
 
 class FlattenHead(nn.Module):
@@ -120,17 +120,17 @@ class Model(nn.Module):
                 mask_ratio=args.mask_ratio,
             )
 
-            # self.projection = FlattenHead(
-            #     seq_len=self.seq_len,
-            #     d_model=self.d_model,
-            #     pred_len=args.input_len,
-            #     dropout=args.head_dropout,
-            # )
-            self.projection = ARFlattenHead(
+            self.projection = FlattenHead(
+                seq_len=self.seq_len,
                 d_model=self.d_model,
-                patch_len=self.patch_len,
+                pred_len=args.input_len,
                 dropout=args.head_dropout,
             )
+            # self.projection = ARFlattenHead(
+            #     d_model=self.d_model,
+            #     patch_len=self.patch_len,
+            #     dropout=args.head_dropout,
+            # )
 
         elif self.task_name == "finetune":
             self.head = FlattenHead(
