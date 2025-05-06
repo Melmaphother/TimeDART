@@ -1,17 +1,44 @@
-
 <div align="center">
   <!-- <h1><b> TimeDART </b></h1> -->
   <!-- <h2><b> TimeDART </b></h2> -->
   <h2>
-    <b> 
-      <img src="assets/dart.png" alt="Dart Image" style="vertical-align: baseline; width: 2em; height: 2em; margin-bottom: -0.2em;">
-      TimeDART: A Diffusion Autoregressive Transformer <br> for Self-Supervised Time Series Representation 
-    </b>
+      <b> 
+          <img src="dart.png" alt="Dart Image" style="vertical-align: middle; width: 1em; height: 1em;">
+          TimeDART: A Diffusion Autoregressive Transformer <br>for Self-Supervised Time Series Representation 
+      </b>
   </h2>
 </div>
 
 
+![](https://img.shields.io/github/last-commit/Melmaphother/TimeDART?color=green)![](https://img.shields.io/github/stars/Melmaphother/TimeDART?color=yellow)![](https://img.shields.io/github/forks/Melmaphother/TimeDART?color=lightblue)
+
+---
+
+>
+>🙋 Please let us know if you find out a mistake or have any suggestions!
+>
+>🌟 If you find our work helpful, please consider to star this repository and cite our research:
+
+```bibtex
+@misc{wang2025timedart,
+      title={TimeDART: A Diffusion Autoregressive Transformer for Self-Supervised Time Series Representation}, 
+      author={Daoyu Wang and Mingyue Cheng and Zhiding Liu and Qi Liu},
+      year={2025},
+      eprint={2410.05711},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2410.05711}, 
+}
+```
+
+
+
 ## Updates/News:
+🚩 **News** (May. 2025): TimeDART has been accepted by ICML 2025.
+
+🚩 **News** (Jan. 2025): TimeDART is under review.
+
+🚩 **News** (Oct. 2024): TimeDART initialized.
 
 ## Introduction
 
@@ -31,13 +58,7 @@ Self-supervised learning has garnered increasing attention in time series analys
 
 ## Usage
 
-Datasets used in our experiments can be found in [Placeholder].
-
-```sh
-cd TimeDART
-conda create -n timedart python=3.10
-pip install -r requirements.txt
-```
+Datasets used in our experiments can be found in [Google Drive](https://drive.google.com/drive/folders/19P---oV4nQ53JgKnE0VX3t_N1jLliVSv?usp=drive_link).
 
 We provide the default hyper-parameter settings in `scripts/prertrain` to perform pretraining, and ready-to-use scripts for fine-tuning on each datasets in `scripts/finetune`.
 
