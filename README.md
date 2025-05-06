@@ -3,7 +3,7 @@
   <!-- <h2><b> TimeDART </b></h2> -->
   <h2>
       <b> 
-          <img src="dart.png" alt="Dart Image" style="vertical-align: middle; width: 1em; height: 1em;">
+          <img src="assets/dart.png" alt="Dart Image" style="vertical-align: middle; width: 1em; height: 1em;">
           TimeDART: A Diffusion Autoregressive Transformer <br>for Self-Supervised Time Series Representation 
       </b>
   </h2>
