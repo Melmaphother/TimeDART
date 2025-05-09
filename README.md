@@ -20,14 +20,12 @@
 >🌟 If you find our work helpful, please consider to star this repository and cite our research:
 
 ```bibtex
-@misc{wang2025timedart,
-      title={TimeDART: A Diffusion Autoregressive Transformer for Self-Supervised Time Series Representation}, 
-      author={Daoyu Wang and Mingyue Cheng and Zhiding Liu and Qi Liu},
-      year={2025},
-      eprint={2410.05711},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2410.05711}, 
+@inproceedings{wang2025timedart,
+  title={TimeDART: A Diffusion Autoregressive Transformer for Self-Supervised Time Series Representation},
+  author={Daoyu Wang and Mingyue Cheng and Zhiding Liu and Qi Liu},
+  booktitle={Forty-second International Conference on Machine Learning},
+  year={2025},
+  url={https://arxiv.org/abs/2410.05711},
 }
 ```
 
