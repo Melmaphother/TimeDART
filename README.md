@@ -4,7 +4,7 @@
   <h2>
       <b> 
           <img src="assets/dart.png" alt="Dart Image" style="vertical-align: middle; width: 1em; height: 1em;">
-          TimeDART: A Diffusion Autoregressive Transformer <br>for Self-Supervised Time Series Representation 
+          [ICML 2025] TimeDART: A Diffusion Autoregressive Transformer <br>for Self-Supervised Time Series Representation 
       </b>
   </h2>
 </div>
