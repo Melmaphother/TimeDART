@@ -1,10 +1,8 @@
 <div align="center">
-  <h2>
-      <b> 
-          <img src="assets/1_dart.png" alt="Dart Image" style="vertical-align: middle; width: 1em; height: 1em;">
-          [ICML 2025] TimeDART: A Diffusion Autoregressive Transformer <br>for Self-Supervised Time Series Representation 
-      </b>
-  </h2>
+  <h1>
+        🎯 [ICML 2025] TimeDART: A Diffusion Autoregressive Transformer 
+        for Self-Supervised Time Series Representation 
+  </h1>
 </div>
 
 <div align="center">
