@@ -1,8 +1,7 @@
 <div align="center">
   <h1>
-        🎯 [ICML 2025] TimeDART: A Diffusion Autoregressive Transformer 
-        for Self-Supervised Time Series Representation 
-  </h1>
+        🎯 TimeDART: A Diffusion Autoregressive Transformer <br> for Self-Supervised Time Series Representation <br> [ICML 2025] 
+  </h1> 
 </div>
 
 <div align="center">
