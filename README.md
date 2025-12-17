@@ -170,11 +170,12 @@ This repo is built on the pioneer works. We appreciate the following GitHub repo
 >🌟 If you find our work helpful, please consider to star this repository and cite our research.
 
 ```bibtex
-@inproceedings{wang2025timedart,
+@artical{wang2025timedart,
   title={TimeDART: A Diffusion Autoregressive Transformer for Self-Supervised Time Series Representation},
   author={Daoyu Wang and Mingyue Cheng and Zhiding Liu and Qi Liu},
-  booktitle={Forty-second International Conference on Machine Learning},
-  year={2025},
-  url={https://arxiv.org/abs/2410.05711},
+  journal={International Conference on Machine Learning},
+  volumn={267},
+  pages={62627-62651},
+  year={2025}
 }
 ```
